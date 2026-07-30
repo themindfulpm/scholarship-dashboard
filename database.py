@@ -38,6 +38,16 @@ def has_scholarships() -> Dict[str, Any]:
         return {"success": False, "error": f"Failed to check scholarship existence: {exc}"}
 
 
+def get_student_profile() -> Dict[str, Any]:
+    """Return the single-row student profile if it exists."""
+    try:
+        with _connect() as conn:
+            row = conn.execute("SELECT * FROM student_profile WHERE id = 1").fetchone()
+        return {"success": True, "data": dict(row) if row else None}
+    except sqlite3.Error as exc:
+        return {"success": False, "error": f"Failed to fetch student profile: {exc}"}
+
+
 def backfill_application_urls() -> Dict[str, Any]:
     """Populate blank application_url values from the stored Source URL note when possible."""
     try:

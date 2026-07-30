@@ -199,3 +199,7 @@ AUTO_PULL_CRITERIA = {
     "countries": AUTO_PULL_COUNTRIES,
     "required_keywords": DEFAULT_AUTO_PULL_KEYWORDS,
 }
+
+PUBLIC_SEARCH_CRITERIA["minimum_gpa"] = 3.22
+PUBLIC_SEARCH_CRITERIA["student_gpa"] = 3.22
+AUTO_PULL_CRITERIA["minimum_gpa"] = 3.22

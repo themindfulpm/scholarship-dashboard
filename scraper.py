@@ -156,6 +156,70 @@ def _extract_application_link(soup: BeautifulSoup, base_url: str) -> Dict[str, s
     }
 
 
+def _extract_opportunity_links(soup: BeautifulSoup, base_url: str, max_links: int = 5) -> List[Dict[str, str]]:
+    opportunity_keywords = [
+        "scholar",
+        "award",
+        "grant",
+        "fellowship",
+        "funding",
+        "opportunity",
+        "application",
+    ]
+    skip_keywords = [
+        "directory",
+        "search",
+        "filter",
+        "login",
+        "sign in",
+        "register",
+        "about",
+        "contact",
+        "privacy",
+        "terms",
+        "rss",
+    ]
+
+    candidates: List[Dict[str, str]] = []
+    seen_urls = set()
+    for anchor in soup.find_all("a", href=True):
+        href = str(anchor.get("href", "")).strip()
+        if not href or href.startswith(("#", "mailto:", "tel:", "javascript:")):
+            continue
+
+        absolute_url = urljoin(base_url, href)
+        if absolute_url == base_url or absolute_url in seen_urls:
+            continue
+
+        anchor_text = " ".join(anchor.get_text(" ", strip=True).split())
+        link_text_l = anchor_text.lower()
+        href_l = href.lower()
+
+        if any(keyword in link_text_l or keyword in href_l for keyword in skip_keywords):
+            continue
+
+        score = 0
+        if any(keyword in link_text_l for keyword in opportunity_keywords):
+            score += 3
+        if any(keyword in href_l for keyword in opportunity_keywords):
+            score += 2
+        if len(anchor_text.split()) >= 3:
+            score += 1
+
+        if score > 0:
+            seen_urls.add(absolute_url)
+            candidates.append(
+                {
+                    "url": absolute_url,
+                    "link_text": anchor_text or absolute_url,
+                    "score": str(score),
+                }
+            )
+
+    candidates.sort(key=lambda item: int(item.get("score", "0")), reverse=True)
+    return candidates[:max_links]
+
+
 def scrape_scholarship_page(
     url: str,
     country: str,
@@ -185,6 +249,7 @@ def scrape_scholarship_page(
         "page_title": "",
         "application_url": "",
         "application_link_text": "",
+        "opportunity_links": [],
         "matched_excerpt": "",
         "notes": "",
     }
@@ -252,6 +317,7 @@ def scrape_scholarship_page(
     soup = BeautifulSoup(body, "html.parser")
     page_title = _extract_page_title(soup, feed_entries)
     app_link = _extract_application_link(soup, final_url or url)
+    opportunity_links = _extract_opportunity_links(soup, final_url or url)
 
     if not aggregated_text:
         result["error"] = "No parseable text found (missing tags or empty response body)."
@@ -286,6 +352,7 @@ def scrape_scholarship_page(
             "page_title": page_title,
             "application_url": app_link.get("application_url", final_url or url),
             "application_link_text": app_link.get("application_link_text", "Source page"),
+            "opportunity_links": opportunity_links,
             "matched_excerpt": excerpt,
             "notes": (
                 "Auto nomination set to True due to counselor/school endorsement keyword."
@@ -425,6 +492,8 @@ def scan_scholarship_sources(
         url = source.get("url", "")
         urls = source.get("urls") or ([url] if url else [])
         enabled = bool(source.get("enabled", True))
+        school_type = str(source.get("school_type", "")).strip().lower()
+        is_public_source = school_type == "public"
 
         if not enabled:
             skipped_sources.append(
@@ -476,39 +545,66 @@ def scan_scholarship_sources(
             )
             continue
 
-        hit_pool = [
-            *scrape_result.get("indicator_hits", []),
-            *scrape_result.get("auto_nomination_hits", []),
-            *scrape_result.get("custom_keyword_hits", []),
-        ]
-        hit_pool_l = [item.lower() for item in hit_pool]
+        candidate_results: List[Dict[str, Any]] = []
+        if is_public_source:
+            opportunity_links = scrape_result.get("opportunity_links", []) or []
+            opportunity_urls = [item.get("url", "") for item in opportunity_links if item.get("url")]
+            for opportunity_url in opportunity_urls:
+                opportunity_result = scrape_scholarship_page(
+                    opportunity_url,
+                    country,
+                    custom_keywords=required_keywords,
+                )
+                if opportunity_result.get("success"):
+                    candidate_results.append(
+                        {
+                            "result": opportunity_result,
+                            "resolved_url": opportunity_url,
+                        }
+                    )
 
-        passes_keyword_gate = True
-        matched_required_keywords: List[str] = []
-        if required_keywords:
-            matched_required_keywords = [kw for kw in required_keywords if kw in hit_pool_l]
-            passes_keyword_gate = bool(matched_required_keywords)
+        if candidate_results:
+            public_candidates = candidate_results
+        else:
+            public_candidates = [{"result": scrape_result, "resolved_url": resolved_url or url}]
 
-        if not passes_keyword_gate:
-            continue
+        for candidate in public_candidates:
+            candidate_result = candidate["result"]
+            candidate_url = candidate["resolved_url"]
 
-        matched_count += 1
-        matches.append(
-            {
-                "school": school,
-                "country": country,
-                "url": resolved_url or url,
-                "requires_hs_nomination": bool(scrape_result.get("requires_hs_nomination", False)),
-                "indicator_hits": scrape_result.get("indicator_hits", []),
-                "auto_nomination_hits": scrape_result.get("auto_nomination_hits", []),
-                "matched_required_keywords": matched_required_keywords,
-                "matched_excerpt": scrape_result.get("matched_excerpt", ""),
-                "page_title": scrape_result.get("page_title", ""),
-                "application_url": scrape_result.get("application_url", resolved_url or url),
-                "application_link_text": scrape_result.get("application_link_text", "Source page"),
-                "source_type": scrape_result.get("source_type"),
-            }
-        )
+            hit_pool = [
+                *candidate_result.get("indicator_hits", []),
+                *candidate_result.get("auto_nomination_hits", []),
+                *candidate_result.get("custom_keyword_hits", []),
+            ]
+            hit_pool_l = [item.lower() for item in hit_pool]
+
+            passes_keyword_gate = True
+            matched_required_keywords: List[str] = []
+            if required_keywords:
+                matched_required_keywords = [kw for kw in required_keywords if kw in hit_pool_l]
+                passes_keyword_gate = bool(matched_required_keywords)
+
+            if not passes_keyword_gate:
+                continue
+
+            matched_count += 1
+            matches.append(
+                {
+                    "school": school,
+                    "country": country,
+                    "url": candidate_url,
+                    "requires_hs_nomination": bool(candidate_result.get("requires_hs_nomination", False)),
+                    "indicator_hits": candidate_result.get("indicator_hits", []),
+                    "auto_nomination_hits": candidate_result.get("auto_nomination_hits", []),
+                    "matched_required_keywords": matched_required_keywords,
+                    "matched_excerpt": candidate_result.get("matched_excerpt", ""),
+                    "page_title": candidate_result.get("page_title", ""),
+                    "application_url": candidate_result.get("application_url", candidate_url),
+                    "application_link_text": candidate_result.get("application_link_text", "Source page"),
+                    "source_type": candidate_result.get("source_type"),
+                }
+            )
 
     return {
         "success": True,

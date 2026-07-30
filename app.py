@@ -129,6 +129,10 @@ def _link_display_df(df: pd.DataFrame) -> pd.DataFrame:
     display_df = df.copy()
     if "application_url" in display_df.columns:
         display_df["application_url"] = display_df["application_url"].fillna("")
+    if "scholarship_min_gpa" in display_df.columns:
+        display_df["gpa_requirement"] = display_df["scholarship_min_gpa"].apply(
+            lambda value: "Any / Unknown" if pd.isna(value) or value == "" else f"{float(value):.2f}+"
+        )
     return display_df
 
 
@@ -203,6 +207,10 @@ def main() -> None:
     m1.metric("Total Potential Value (USD/CAD)", metrics["totals"])
     m2.metric("Pending HS Nominations", metrics["pending"])
     m3.metric("Next Approaching Target Deadline", metrics["next_deadline"])
+    student_profile_result = db.get_student_profile()
+    student_profile = student_profile_result.get("data") if student_profile_result.get("success") else None
+    student_gpa = student_profile.get("unweighted_gpa") if student_profile else AUTO_PULL_CRITERIA["unweighted_gpa"]
+    st.caption(f"Student GPA used for eligibility filtering: {student_gpa:.2f}")
 
     tab1, tab2, tab3 = st.tabs(
         [
@@ -232,6 +240,11 @@ def main() -> None:
                 width="stretch",
                 hide_index=True,
                 column_config={
+                    "scholarship_min_gpa": st.column_config.NumberColumn(
+                        "GPA requirement",
+                        format="%.2f",
+                        help="Minimum GPA required for the scholarship",
+                    ),
                     "application_url": st.column_config.LinkColumn(
                         "Apply link",
                         display_text="Open application",
@@ -280,6 +293,7 @@ def main() -> None:
                         "country": latest_scrape.get("country", "US"),
                         "award_amount": 0,
                         "currency": "CAD" if latest_scrape.get("country") == "Canada" else "USD",
+                        "scholarship_min_gpa": None,
                         "status": "Not Started",
                         "requires_hs_nomination": bool(latest_scrape.get("requires_hs_nomination", False)),
                         "nomination_status": "Not Requested",
@@ -377,6 +391,7 @@ def main() -> None:
                                 "school": item.get("school"),
                                 "country": item.get("country"),
                                 "requires_hs_nomination": item.get("requires_hs_nomination"),
+                                "gpa_requirement": item.get("scholarship_min_gpa"),
                                 "matched_keywords": ", ".join(item.get("matched_required_keywords", [])) or "(none)",
                                 "source_type": item.get("source_type"),
                                 "url": item.get("url"),
@@ -549,6 +564,98 @@ def main() -> None:
                             "source": item.get("school"),
                             "country": item.get("country"),
                             "requires_hs_nomination": item.get("requires_hs_nomination"),
+                            "gpa_requirement": item.get("scholarship_min_gpa"),
+                            "matched_keywords": ", ".join(item.get("matched_required_keywords", [])) or "(none)",
+                            "page_title": item.get("page_title", ""),
+                            "application_url": item.get("application_url", item.get("url")),
+                        }
+                    )
+                if public_rows:
+                    st.dataframe(
+                        pd.DataFrame(public_rows),
+                        width="stretch",
+                        hide_index=True,
+                        column_config={
+                            "gpa_requirement": st.column_config.NumberColumn("GPA requirement", format="%.2f"),
+                            "application_url": st.column_config.LinkColumn(
+                                "Apply link",
+                                display_text="Open application",
+                            )
+                        },
+                    )
+
+                public_failures = latest_public_scan.get("failures", [])
+                if public_failures:
+                    with st.expander("Public scan failures"):
+                        public_failure_rows = []
+                        for failure in public_failures:
+                            attempts = failure.get("attempts", [])
+                            attempts_text = " | ".join(
+                                f"{a.get('url', '')} => {a.get('error', '')}" for a in attempts
+                            )
+                            public_failure_rows.append(
+                                {
+                                    "source": failure.get("school"),
+                                    "url": failure.get("url"),
+                                    "error": failure.get("error"),
+                                    "attempts": attempts_text,
+                                }
+                            )
+                        st.dataframe(pd.DataFrame(public_failure_rows), width="stretch", hide_index=True)
+
+                public_skipped = latest_public_scan.get("skipped_sources", [])
+                if public_skipped:
+                    with st.expander("Skipped public sources"):
+                        st.dataframe(pd.DataFrame(public_skipped), width="stretch", hide_index=True)
+
+                public_save_stats = st.session_state.get("latest_public_save_stats")
+                if public_save_stats:
+                    st.caption(
+                        f"Public auto-save: inserted {public_save_stats['inserted']}, "
+                        f"updated {public_save_stats['updated']}, failures {len(public_save_stats['failures'])}."
+                    )
+                    if public_save_stats["failures"]:
+                        with st.expander("Public auto-save failures"):
+                            st.dataframe(pd.DataFrame(public_save_stats["failures"]), width="stretch", hide_index=True)
+            else:
+                st.error("Public scholarship scan failed.")
+                        notes=notes,
+                    )
+                    if not upsert_result.get("success"):
+                        save_failures.append(
+                            {
+                                "school": match["school"],
+                                "error": upsert_result.get("error", "Unknown upsert error"),
+                            }
+                        )
+                        continue
+
+                    if upsert_result.get("action") == "inserted":
+                        inserted += 1
+                    else:
+                        updated += 1
+
+                st.session_state["latest_public_save_stats"] = {
+                    "inserted": inserted,
+                    "updated": updated,
+                    "failures": save_failures,
+                }
+                st.rerun()
+
+        latest_public_scan = st.session_state.get("latest_public_scan")
+        if latest_public_scan:
+            if latest_public_scan.get("success"):
+                st.success(
+                    f"Scanned {latest_public_scan.get('scanned_count', 0)} public sources; "
+                    f"matched {latest_public_scan.get('matched_count', 0)} opportunities."
+                )
+                public_rows = []
+                for item in latest_public_scan.get("matches", []):
+                    public_rows.append(
+                        {
+                            "source": item.get("school"),
+                            "country": item.get("country"),
+                            "requires_hs_nomination": item.get("requires_hs_nomination"),
                             "matched_keywords": ", ".join(item.get("matched_required_keywords", [])) or "(none)",
                             "page_title": item.get("page_title", ""),
                             "application_url": item.get("application_url", item.get("url")),
@@ -610,6 +717,7 @@ def main() -> None:
                 title = st.text_input("Scholarship Title *")
                 target_school = st.text_input("Target School")
                 application_url = st.text_input("Application Link")
+                scholarship_min_gpa = st.number_input("Minimum GPA Requirement", min_value=0.0, max_value=5.0, step=0.1, value=0.0)
                 country = st.radio("Country *", ["US", "Canada"], horizontal=True)
                 currency = st.radio("Currency *", ["USD", "CAD"], horizontal=True)
                 award_amount = st.number_input("Award Amount", min_value=0.0, step=500.0)
@@ -648,6 +756,7 @@ def main() -> None:
                     "nomination_deadline": nom_deadline_str,
                     "nomination_status": nomination_status,
                     "essay_required": essay_required,
+                    "scholarship_min_gpa": scholarship_min_gpa if scholarship_min_gpa > 0 else None,
                     "notes": notes,
                 }
                 result = db.add_scholarship(payload)
