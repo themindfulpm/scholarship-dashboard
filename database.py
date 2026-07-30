@@ -79,6 +79,39 @@ def backfill_application_urls() -> Dict[str, Any]:
         return {"success": False, "error": f"Failed to backfill application URLs: {exc}"}
 
 
+def cleanup_public_listicle_rows() -> Dict[str, Any]:
+    """Delete obvious listicle/directory public rows from previous broad scans."""
+    try:
+        with _connect() as conn:
+            cursor = conn.execute(
+                """
+                DELETE FROM scholarships
+                WHERE target_school = 'Public scholarship'
+                  AND (
+                    LOWER(title) LIKE '%top %'
+                    OR LOWER(title) LIKE '%best %'
+                    OR LOWER(title) LIKE '%list of%'
+                    OR LOWER(title) LIKE '%by major%'
+                    OR LOWER(title) LIKE '%by state%'
+                    OR LOWER(title) LIKE '%scholarships in %'
+                    OR LOWER(title) LIKE '%scholarships for %'
+                    OR LOWER(title) LIKE '%directory%'
+                                        OR LOWER(title) IN ('unigo scholarships', 'bold.org scholarships', 'fastweb scholarships', 'submit your scholarship')
+                    OR LOWER(application_url) LIKE '%bold.org/apply%'
+                    OR LOWER(application_url) LIKE '%scholarship-search%'
+                    OR LOWER(application_url) LIKE '%new-login%'
+                    OR LOWER(application_url) LIKE '%list-your-scholarship%'
+                    OR LOWER(application_url) LIKE '%submit-your-scholarship%'
+                                        OR LOWER(application_url) LIKE '%/contact-us/submitting-or-editing-a-scholarship%'
+                                        OR (application_deadline IS NOT NULL AND TRIM(application_deadline) <> '' AND application_deadline < DATE('now'))
+                  )
+                """
+            )
+        return {"success": True, "deleted": cursor.rowcount}
+    except sqlite3.Error as exc:
+        return {"success": False, "error": f"Failed to cleanup public listicle rows: {exc}"}
+
+
 def get_essays() -> Dict[str, Any]:
     """Return all master essays as a list of dicts."""
     try:
@@ -149,6 +182,9 @@ def upsert_scraped_scholarship(
     requires_hs_nomination: bool,
     notes: str,
     application_url: str = "",
+    application_deadline: str | None = None,
+    scholarship_min_gpa: float | None = None,
+    student_gpa: float | None = None,
     title: str = "",
     target_school: str = "",
 ) -> Dict[str, Any]:
@@ -156,6 +192,12 @@ def upsert_scraped_scholarship(
     currency = "CAD" if country == "Canada" else "USD"
     title_value = title.strip() or f"{school} scholarship opportunity"
     target_school_value = target_school.strip() or school
+    is_eligible = None
+    if scholarship_min_gpa is not None and student_gpa is not None:
+        try:
+            is_eligible = int(float(student_gpa) >= float(scholarship_min_gpa))
+        except (TypeError, ValueError):
+            is_eligible = None
 
     try:
         with _connect() as conn:
@@ -180,14 +222,17 @@ def upsert_scraped_scholarship(
                         country,
                         award_amount,
                         currency,
+                        scholarship_min_gpa,
+                        is_eligible,
                         application_url,
+                        application_deadline,
                         status,
                         requires_hs_nomination,
                         nomination_status,
                         essay_required,
                         notes
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         title_value,
@@ -195,7 +240,10 @@ def upsert_scraped_scholarship(
                         country,
                         0,
                         currency,
+                        scholarship_min_gpa,
+                        is_eligible,
                         application_url.strip() or source_url,
+                        application_deadline,
                         "Not Started",
                         int(requires_hs_nomination),
                         "Not Requested",
@@ -215,7 +263,10 @@ def upsert_scraped_scholarship(
                 SET
                     title = ?,
                     target_school = ?,
+                    scholarship_min_gpa = ?,
+                    is_eligible = ?,
                     application_url = ?,
+                    application_deadline = ?,
                     requires_hs_nomination = ?,
                     notes = ?
                 WHERE id = ?
@@ -223,7 +274,10 @@ def upsert_scraped_scholarship(
                 (
                     title_value,
                     target_school_value,
+                    scholarship_min_gpa,
+                    is_eligible,
                     application_url.strip() or source_url,
+                    application_deadline,
                     int(requires_hs_nomination),
                     normalized_notes,
                     existing["id"],

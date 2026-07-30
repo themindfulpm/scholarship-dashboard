@@ -154,6 +154,12 @@ def main() -> None:
             f"Apply link backfill warning: {backfill_result.get('error', 'Unable to backfill application links.')}"
         )
 
+    cleanup_result = db.cleanup_public_listicle_rows()
+    if not cleanup_result.get("success"):
+        st.warning(
+            f"Public result cleanup warning: {cleanup_result.get('error', 'Unable to clean older listicle rows.')}"
+        )
+
     seed_link_backfill = backfill_seed_application_urls()
     if not seed_link_backfill.get("success"):
         st.warning(
@@ -293,12 +299,18 @@ def main() -> None:
                         "country": latest_scrape.get("country", "US"),
                         "award_amount": 0,
                         "currency": "CAD" if latest_scrape.get("country") == "Canada" else "USD",
-                        "scholarship_min_gpa": None,
+                        "scholarship_min_gpa": latest_scrape.get("scholarship_min_gpa"),
+                        "is_eligible": (
+                            int(float(student_gpa) >= float(latest_scrape.get("scholarship_min_gpa")))
+                            if latest_scrape.get("scholarship_min_gpa") is not None
+                            else None
+                        ),
                         "status": "Not Started",
                         "requires_hs_nomination": bool(latest_scrape.get("requires_hs_nomination", False)),
                         "nomination_status": "Not Requested",
                         "essay_required": True,
                         "application_url": latest_scrape.get("application_url", latest_scrape_url),
+                        "application_deadline": latest_scrape.get("application_deadline"),
                         "notes": notes,
                     }
                     add_result = db.add_scholarship(payload)
@@ -330,6 +342,7 @@ def main() -> None:
                 sources=SOURCE_CATALOG,
                 required_keywords=configured_keywords,
                 country_filter=configured_countries,
+                student_gpa=float(student_gpa),
             )
             st.session_state["latest_auto_scan"] = scan_result
 
@@ -342,6 +355,9 @@ def main() -> None:
                         f"Indicator hits: {', '.join(match.get('indicator_hits', [])) or 'none'}\n"
                         f"Auto nomination hits: {', '.join(match.get('auto_nomination_hits', [])) or 'none'}\n"
                         f"Matched required keywords: {', '.join(match.get('matched_required_keywords', [])) or 'none'}\n"
+                        f"Opportunity quality score: {match.get('quality_score', 0)}\n"
+                        f"Application deadline: {match.get('application_deadline') or 'unknown'}\n"
+                        f"Minimum GPA requirement: {match.get('scholarship_min_gpa') if match.get('scholarship_min_gpa') is not None else 'unknown'}\n"
                         f"Excerpt: {match.get('matched_excerpt', '')}"
                     )
                     upsert_result = db.upsert_scraped_scholarship(
@@ -350,6 +366,9 @@ def main() -> None:
                         country=match["country"],
                         requires_hs_nomination=match["requires_hs_nomination"],
                         application_url=match.get("application_url", match["url"]),
+                        application_deadline=match.get("application_deadline"),
+                        scholarship_min_gpa=match.get("scholarship_min_gpa"),
+                        student_gpa=float(student_gpa),
                         title=match.get("page_title", ""),
                         target_school=match.get("page_title", "") or match["school"],
                         notes=notes,
@@ -392,6 +411,8 @@ def main() -> None:
                                 "country": item.get("country"),
                                 "requires_hs_nomination": item.get("requires_hs_nomination"),
                                 "gpa_requirement": item.get("scholarship_min_gpa"),
+                                "quality_score": item.get("quality_score", 0),
+                                "application_deadline": item.get("application_deadline"),
                                 "matched_keywords": ", ".join(item.get("matched_required_keywords", [])) or "(none)",
                                 "source_type": item.get("source_type"),
                                 "url": item.get("url"),
@@ -504,6 +525,7 @@ def main() -> None:
                 sources=PUBLIC_SOURCE_CATALOG,
                 required_keywords=final_public_keywords,
                 country_filter=public_countries,
+                student_gpa=float(student_gpa),
             )
             st.session_state["latest_public_scan"] = public_scan_result
 
@@ -517,6 +539,9 @@ def main() -> None:
                         f"Indicator hits: {', '.join(match.get('indicator_hits', [])) or 'none'}\n"
                         f"Auto nomination hits: {', '.join(match.get('auto_nomination_hits', [])) or 'none'}\n"
                         f"Matched required keywords: {', '.join(match.get('matched_required_keywords', [])) or 'none'}\n"
+                        f"Opportunity quality score: {match.get('quality_score', 0)}\n"
+                        f"Application deadline: {match.get('application_deadline') or 'unknown'}\n"
+                        f"Minimum GPA requirement: {match.get('scholarship_min_gpa') if match.get('scholarship_min_gpa') is not None else 'unknown'}\n"
                         f"Excerpt: {match.get('matched_excerpt', '')}"
                     )
                     upsert_result = db.upsert_scraped_scholarship(
@@ -525,6 +550,9 @@ def main() -> None:
                         country=match["country"],
                         requires_hs_nomination=match["requires_hs_nomination"],
                         application_url=match.get("application_url", match["url"]),
+                        application_deadline=match.get("application_deadline"),
+                        scholarship_min_gpa=match.get("scholarship_min_gpa"),
+                        student_gpa=float(student_gpa),
                         title=match.get("page_title", "") or match.get("school", "Public scholarship"),
                         target_school="Public scholarship",
                         notes=notes,
@@ -565,6 +593,8 @@ def main() -> None:
                             "country": item.get("country"),
                             "requires_hs_nomination": item.get("requires_hs_nomination"),
                             "gpa_requirement": item.get("scholarship_min_gpa"),
+                            "quality_score": item.get("quality_score", 0),
+                            "application_deadline": item.get("application_deadline"),
                             "matched_keywords": ", ".join(item.get("matched_required_keywords", [])) or "(none)",
                             "page_title": item.get("page_title", ""),
                             "application_url": item.get("application_url", item.get("url")),

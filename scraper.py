@@ -7,6 +7,7 @@ This module provides:
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from datetime import datetime
 from email.utils import parsedate_to_datetime
@@ -19,6 +20,7 @@ from bs4 import BeautifulSoup
 
 
 REQUEST_TIMEOUT_SECONDS = 20
+PUBLIC_MIN_QUALITY_SCORE = 7
 
 INDICATOR_KEYWORDS = [
     "school nomination",
@@ -87,6 +89,151 @@ def _find_keyword_hits(text: str, keywords: List[str]) -> List[str]:
     return [kw for kw in keywords if kw in text_l]
 
 
+def _extract_min_gpa(text: str) -> Optional[float]:
+    text_l = text.lower()
+    patterns = [
+        r"minimum\s+gpa\s*(?:of|is|:)?\s*(\d(?:\.\d{1,2})?)",
+        r"gpa\s*(?:minimum|requirement|required)?\s*(?:of|is|:|>=|>|at\s+least)?\s*(\d(?:\.\d{1,2})?)",
+        r"must\s+have\s+(?:a\s+)?gpa\s*(?:of|:|>=|>|at\s+least)?\s*(\d(?:\.\d{1,2})?)",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text_l)
+        if match:
+            try:
+                value = float(match.group(1))
+                if 0.0 <= value <= 5.0:
+                    return value
+            except (TypeError, ValueError):
+                continue
+    return None
+
+
+def _extract_application_deadline(text: str) -> Optional[str]:
+    text_l = text.lower()
+
+    anchored = re.search(
+        r"(?:deadline|apply by|application due|due date|submission deadline)\s*(?:is|:)?\s*"
+        r"([a-zA-Z]{3,9}\s+\d{1,2},\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}/\d{4})",
+        text_l,
+    )
+    candidates: List[str] = []
+    if anchored:
+        candidates.append(anchored.group(1))
+
+    broad = re.findall(
+        r"\b([a-zA-Z]{3,9}\s+\d{1,2},\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}/\d{4})\b",
+        text,
+    )
+    candidates.extend(broad[:15])
+
+    for raw in candidates:
+        parsed = _parse_possible_datetime(raw)
+        if parsed is not None:
+            return parsed.date().isoformat()
+    return None
+
+
+def _is_listicle_or_directory_page(title: str, text: str) -> bool:
+    title_l = (title or "").lower()
+    text_l = text.lower()
+    markers = [
+        "top 10",
+        "top 20",
+        "top scholarships",
+        "best scholarships",
+        "list of scholarships",
+        "scholarship directory",
+        "browse scholarships",
+        "scholarship search",
+        "scholarship database",
+        "find scholarships",
+    ]
+    if any(marker in title_l for marker in markers):
+        return True
+    if any(marker in text_l[:5000] for marker in markers):
+        return True
+    if re.search(r"\btop\s+\d+\b", title_l):
+        return True
+    if re.search(r"\bbest\s+\d+\b", title_l):
+        return True
+    if re.search(r"\bscholarships\s+in\s+[a-z\s]+\b", title_l):
+        return True
+    if re.search(r"\bscholarships\s+for\s+[a-z\s]+\b", title_l):
+        return True
+    if " by major" in title_l or " by state" in title_l:
+        return True
+    return False
+
+
+def _is_low_quality_public_opportunity(result: Dict[str, Any], url: str) -> bool:
+    title_l = str(result.get("page_title", "") or "").lower()
+    app_url_l = str(result.get("application_url", "") or "").lower()
+    url_l = (url or "").lower()
+
+    low_quality_markers = [
+        "top ",
+        "best ",
+        "list of",
+        "directory",
+        "scholarship search",
+        "scholarships in ",
+        "scholarships for ",
+        "by major",
+        "by state",
+    ]
+    if any(marker in title_l for marker in low_quality_markers):
+        return True
+
+    blocked_apply_targets = [
+        "list-your-scholarship",
+        "submit-your-scholarship",
+        "scholarship-search",
+        "new-login",
+    ]
+    if any(marker in app_url_l for marker in blocked_apply_targets):
+        return True
+
+    if any(marker in url_l for marker in ["/directory", "/scholarships?", "/search"]):
+        return True
+
+    return False
+
+
+def _compute_public_quality_score(
+    result: Dict[str, Any],
+    url: str,
+    matched_required_keywords: List[str],
+    opportunity_link_score: int = 0,
+) -> int:
+    score = 0
+    title_l = str(result.get("page_title", "") or "").lower()
+    app_url_l = str(result.get("application_url", "") or "").lower()
+    url_l = (url or "").lower()
+
+    if result.get("application_deadline"):
+        score += 3
+
+    if any(token in title_l for token in ["scholarship", "award", "grant", "fellowship"]):
+        score += 2
+
+    if any(token in app_url_l for token in ["apply", "application", "portal", "form"]):
+        score += 2
+
+    if matched_required_keywords:
+        score += min(3, len(matched_required_keywords))
+
+    if result.get("scholarship_min_gpa") is not None:
+        score += 1
+
+    if opportunity_link_score > 0:
+        score += min(2, opportunity_link_score // 3)
+
+    if any(token in url_l for token in ["/apply", "/scholarship", "/award"]):
+        score += 1
+
+    return score
+
+
 def _extract_page_title(soup: BeautifulSoup, feed_entries: List[Any]) -> str:
     if feed_entries:
         first_entry = feed_entries[0]
@@ -115,6 +262,16 @@ def _extract_application_link(soup: BeautifulSoup, base_url: str) -> Dict[str, s
     ]
 
     candidates: List[Dict[str, str]] = []
+    blocked_href_keywords = [
+        "list-your-scholarship",
+        "submit-your-scholarship",
+        "provider",
+        "new-login",
+        "sign-in",
+        "register",
+        "scholarship-search",
+        "directory",
+    ]
     for anchor in soup.find_all("a", href=True):
         href = str(anchor.get("href", "")).strip()
         if not href or href.startswith(("#", "mailto:", "tel:", "javascript:")):
@@ -124,6 +281,8 @@ def _extract_application_link(soup: BeautifulSoup, base_url: str) -> Dict[str, s
         anchor_text = " ".join(anchor.get_text(" ", strip=True).split())
         link_text_l = anchor_text.lower()
         href_l = href.lower()
+        if any(blocked in href_l for blocked in blocked_href_keywords):
+            continue
 
         score = 0
         if any(keyword in link_text_l for keyword in keyword_boosts):
@@ -249,6 +408,9 @@ def scrape_scholarship_page(
         "page_title": "",
         "application_url": "",
         "application_link_text": "",
+        "application_deadline": None,
+        "scholarship_min_gpa": None,
+        "is_list_page": False,
         "opportunity_links": [],
         "matched_excerpt": "",
         "notes": "",
@@ -318,6 +480,9 @@ def scrape_scholarship_page(
     page_title = _extract_page_title(soup, feed_entries)
     app_link = _extract_application_link(soup, final_url or url)
     opportunity_links = _extract_opportunity_links(soup, final_url or url)
+    min_gpa = _extract_min_gpa(aggregated_text)
+    application_deadline = _extract_application_deadline(aggregated_text)
+    is_list_page = _is_listicle_or_directory_page(page_title, aggregated_text)
 
     if not aggregated_text:
         result["error"] = "No parseable text found (missing tags or empty response body)."
@@ -352,6 +517,9 @@ def scrape_scholarship_page(
             "page_title": page_title,
             "application_url": app_link.get("application_url", final_url or url),
             "application_link_text": app_link.get("application_link_text", "Source page"),
+            "application_deadline": application_deadline,
+            "scholarship_min_gpa": min_gpa,
+            "is_list_page": is_list_page,
             "opportunity_links": opportunity_links,
             "matched_excerpt": excerpt,
             "notes": (
@@ -469,6 +637,7 @@ def scan_scholarship_sources(
     sources: List[Dict[str, Any]],
     required_keywords: Optional[List[str]] = None,
     country_filter: Optional[List[str]] = None,
+    student_gpa: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Scan configured school sources and return matched opportunities.
 
@@ -548,29 +717,58 @@ def scan_scholarship_sources(
         candidate_results: List[Dict[str, Any]] = []
         if is_public_source:
             opportunity_links = scrape_result.get("opportunity_links", []) or []
-            opportunity_urls = [item.get("url", "") for item in opportunity_links if item.get("url")]
-            for opportunity_url in opportunity_urls:
+            for opportunity_link in opportunity_links:
+                opportunity_url = opportunity_link.get("url", "")
+                if not opportunity_url:
+                    continue
                 opportunity_result = scrape_scholarship_page(
                     opportunity_url,
                     country,
                     custom_keywords=required_keywords,
                 )
                 if opportunity_result.get("success"):
+                    try:
+                        link_score = int(opportunity_link.get("score", "0"))
+                    except (TypeError, ValueError):
+                        link_score = 0
                     candidate_results.append(
                         {
                             "result": opportunity_result,
                             "resolved_url": opportunity_url,
+                            "opportunity_link_score": link_score,
                         }
                     )
 
         if candidate_results:
             public_candidates = candidate_results
         else:
+            if is_public_source:
+                continue
             public_candidates = [{"result": scrape_result, "resolved_url": resolved_url or url}]
+
+        emitted_for_source = 0
+        seen_candidate_urls = set()
 
         for candidate in public_candidates:
             candidate_result = candidate["result"]
             candidate_url = candidate["resolved_url"]
+            opportunity_link_score = int(candidate.get("opportunity_link_score", 0) or 0)
+
+            if candidate_url in seen_candidate_urls:
+                continue
+            seen_candidate_urls.add(candidate_url)
+
+            # For public sources, reject listicles/directories and keep drilled-down opportunities.
+            if is_public_source and candidate_result.get("is_list_page"):
+                continue
+            if is_public_source and _is_low_quality_public_opportunity(candidate_result, candidate_url):
+                continue
+            if is_public_source and not candidate_result.get("application_deadline"):
+                continue
+            if is_public_source and candidate_result.get("application_deadline"):
+                parsed_deadline = _parse_possible_datetime(candidate_result.get("application_deadline"))
+                if parsed_deadline is not None and parsed_deadline.date() < datetime.now().date():
+                    continue
 
             hit_pool = [
                 *candidate_result.get("indicator_hits", []),
@@ -588,7 +786,27 @@ def scan_scholarship_sources(
             if not passes_keyword_gate:
                 continue
 
+            candidate_min_gpa = candidate_result.get("scholarship_min_gpa")
+            if student_gpa is not None and candidate_min_gpa is not None:
+                try:
+                    if float(candidate_min_gpa) > float(student_gpa):
+                        continue
+                except (TypeError, ValueError):
+                    pass
+
+            quality_score = 0
+            if is_public_source:
+                quality_score = _compute_public_quality_score(
+                    candidate_result,
+                    candidate_url,
+                    matched_required_keywords,
+                    opportunity_link_score,
+                )
+                if quality_score < PUBLIC_MIN_QUALITY_SCORE:
+                    continue
+
             matched_count += 1
+            emitted_for_source += 1
             matches.append(
                 {
                     "school": school,
@@ -602,9 +820,15 @@ def scan_scholarship_sources(
                     "page_title": candidate_result.get("page_title", ""),
                     "application_url": candidate_result.get("application_url", candidate_url),
                     "application_link_text": candidate_result.get("application_link_text", "Source page"),
+                    "application_deadline": candidate_result.get("application_deadline"),
+                    "scholarship_min_gpa": candidate_result.get("scholarship_min_gpa"),
+                    "quality_score": quality_score,
                     "source_type": candidate_result.get("source_type"),
                 }
             )
+
+            if is_public_source and emitted_for_source >= 3:
+                break
 
     return {
         "success": True,
