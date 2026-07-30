@@ -10,7 +10,14 @@ import streamlit as st
 import database as db
 import scraper
 from seed_data import seed_initial_scholarships
-from source_config import AUTO_PULL_COUNTRIES, AUTO_PULL_CRITERIA, DEFAULT_AUTO_PULL_KEYWORDS, SOURCE_CATALOG
+from source_config import (
+    AUTO_PULL_COUNTRIES,
+    AUTO_PULL_CRITERIA,
+    DEFAULT_AUTO_PULL_KEYWORDS,
+    PUBLIC_SEARCH_CRITERIA,
+    PUBLIC_SOURCE_CATALOG,
+    SOURCE_CATALOG,
+)
 
 
 STATUS_OPTIONS = ["Not Started", "In Progress", "Submitted", "Awarded", "Rejected"]
@@ -118,6 +125,13 @@ def _draft_title_from_url(url: str) -> str:
     return f"{host} scholarship opportunity"
 
 
+def _link_display_df(df: pd.DataFrame) -> pd.DataFrame:
+    display_df = df.copy()
+    if "application_url" in display_df.columns:
+        display_df["application_url"] = display_df["application_url"].fillna("")
+    return display_df
+
+
 def main() -> None:
     st.set_page_config(
         page_title="Fall 2027 Scholarship & Application Engine (US & Canada)",
@@ -183,13 +197,24 @@ def main() -> None:
             table_df = scholarships_df.copy()
             if "is_eligible" in table_df.columns:
                 table_df["eligibility"] = table_df["is_eligible"].apply(_eligibility_label)
+            table_df = _link_display_df(table_df)
             date_columns = ["application_deadline", "nomination_deadline"]
             for col in date_columns:
                 if col in table_df.columns:
                     table_df[col] = table_df[col].fillna("")
 
             styled = _highlight_urgent_nomination_rows(table_df)
-            st.dataframe(styled, width="stretch", hide_index=True)
+            st.dataframe(
+                styled,
+                width="stretch",
+                hide_index=True,
+                column_config={
+                    "application_url": st.column_config.LinkColumn(
+                        "Apply link",
+                        display_text="Open application",
+                    )
+                },
+            )
             st.caption("Rows in red indicate HS nomination deadlines within 30 days.")
 
         st.markdown("### Pull scholarship info from a school page or RSS")
@@ -227,8 +252,8 @@ def main() -> None:
                         f"Excerpt: {latest_scrape.get('matched_excerpt', '')}"
                     )
                     payload = {
-                        "title": _draft_title_from_url(latest_scrape_url),
-                        "target_school": "",
+                        "title": latest_scrape.get("page_title") or _draft_title_from_url(latest_scrape_url),
+                        "target_school": latest_scrape.get("page_title") or "Public scholarship",
                         "country": latest_scrape.get("country", "US"),
                         "award_amount": 0,
                         "currency": "CAD" if latest_scrape.get("country") == "Canada" else "USD",
@@ -236,6 +261,7 @@ def main() -> None:
                         "requires_hs_nomination": bool(latest_scrape.get("requires_hs_nomination", False)),
                         "nomination_status": "Not Requested",
                         "essay_required": True,
+                        "application_url": latest_scrape.get("application_url", latest_scrape_url),
                         "notes": notes,
                     }
                     add_result = db.add_scholarship(payload)
@@ -286,6 +312,9 @@ def main() -> None:
                         school=match["school"],
                         country=match["country"],
                         requires_hs_nomination=match["requires_hs_nomination"],
+                        application_url=match.get("application_url", match["url"]),
+                        title=match.get("page_title", ""),
+                        target_school=match.get("page_title", "") or match["school"],
                         notes=notes,
                     )
                     if not upsert_result.get("success"):
@@ -328,9 +357,20 @@ def main() -> None:
                                 "matched_keywords": ", ".join(item.get("matched_required_keywords", [])) or "(none)",
                                 "source_type": item.get("source_type"),
                                 "url": item.get("url"),
+                                "application_url": item.get("application_url", item.get("url")),
                             }
                         )
-                    st.dataframe(pd.DataFrame(display_rows), width="stretch", hide_index=True)
+                    st.dataframe(
+                        pd.DataFrame(display_rows),
+                        width="stretch",
+                        hide_index=True,
+                        column_config={
+                            "application_url": st.column_config.LinkColumn(
+                                "Apply link",
+                                display_text="Open application",
+                            )
+                        },
+                    )
 
                 failures = latest_auto_scan.get("failures", [])
                 if failures:
@@ -368,12 +408,185 @@ def main() -> None:
             else:
                 st.error("Automatic scan failed.")
 
+        st.markdown("### Public scholarship search (not university-specific)")
+        public_keywords = st.multiselect(
+            "Public scholarship keywords",
+            PUBLIC_SEARCH_CRITERIA["public_keywords"]
+            + PUBLIC_SEARCH_CRITERIA["major_keywords"]
+            + PUBLIC_SEARCH_CRITERIA["audience_keywords"],
+            default=PUBLIC_SEARCH_CRITERIA["public_keywords"]
+            + PUBLIC_SEARCH_CRITERIA["major_keywords"]
+            + ["black", "african american", "black male", "male", "diversity", "minority"],
+            key="public_keywords",
+        )
+        public_countries = st.multiselect(
+            "Public scholarship countries",
+            ["US", "Canada"],
+            default=PUBLIC_SEARCH_CRITERIA["countries"],
+            key="public_countries",
+        )
+        include_black_male = st.checkbox(
+            "Include Black male / Black student focused criteria",
+            value=True,
+            key="include_black_male",
+        )
+        include_major_related = st.checkbox(
+            "Include construction-management related criteria",
+            value=True,
+            key="include_major_related",
+        )
+        public_auto_save = st.checkbox("Auto-save public matches to tracker", value=True, key="public_auto_save")
+
+        if st.button("Run public scholarship scan", key="run_public_scan"):
+            final_public_keywords = list(public_keywords)
+            if include_black_male:
+                final_public_keywords.extend([
+                    "black",
+                    "african american",
+                    "black male",
+                    "male",
+                    "men",
+                    "diversity",
+                    "minority",
+                    "underrepresented",
+                    "bipoc",
+                ])
+            if include_major_related:
+                final_public_keywords.extend([
+                    "construction management",
+                    "construction",
+                    "building science",
+                    "civil engineering",
+                    "project management",
+                    "architecture",
+                    "engineer",
+                ])
+
+            public_scan_result = scraper.scan_scholarship_sources(
+                sources=PUBLIC_SOURCE_CATALOG,
+                required_keywords=final_public_keywords,
+                country_filter=public_countries,
+            )
+            st.session_state["latest_public_scan"] = public_scan_result
+
+            if public_scan_result.get("success") and public_auto_save:
+                inserted = 0
+                updated = 0
+                save_failures = []
+                for match in public_scan_result.get("matches", []):
+                    notes = (
+                        f"Public source scan\n"
+                        f"Indicator hits: {', '.join(match.get('indicator_hits', [])) or 'none'}\n"
+                        f"Auto nomination hits: {', '.join(match.get('auto_nomination_hits', [])) or 'none'}\n"
+                        f"Matched required keywords: {', '.join(match.get('matched_required_keywords', [])) or 'none'}\n"
+                        f"Excerpt: {match.get('matched_excerpt', '')}"
+                    )
+                    upsert_result = db.upsert_scraped_scholarship(
+                        source_url=match["url"],
+                        school=match["school"],
+                        country=match["country"],
+                        requires_hs_nomination=match["requires_hs_nomination"],
+                        application_url=match.get("application_url", match["url"]),
+                        title=match.get("page_title", "") or match.get("school", "Public scholarship"),
+                        target_school="Public scholarship",
+                        notes=notes,
+                    )
+                    if not upsert_result.get("success"):
+                        save_failures.append(
+                            {
+                                "school": match["school"],
+                                "error": upsert_result.get("error", "Unknown upsert error"),
+                            }
+                        )
+                        continue
+
+                    if upsert_result.get("action") == "inserted":
+                        inserted += 1
+                    else:
+                        updated += 1
+
+                st.session_state["latest_public_save_stats"] = {
+                    "inserted": inserted,
+                    "updated": updated,
+                    "failures": save_failures,
+                }
+                st.rerun()
+
+        latest_public_scan = st.session_state.get("latest_public_scan")
+        if latest_public_scan:
+            if latest_public_scan.get("success"):
+                st.success(
+                    f"Scanned {latest_public_scan.get('scanned_count', 0)} public sources; "
+                    f"matched {latest_public_scan.get('matched_count', 0)} opportunities."
+                )
+                public_rows = []
+                for item in latest_public_scan.get("matches", []):
+                    public_rows.append(
+                        {
+                            "source": item.get("school"),
+                            "country": item.get("country"),
+                            "requires_hs_nomination": item.get("requires_hs_nomination"),
+                            "matched_keywords": ", ".join(item.get("matched_required_keywords", [])) or "(none)",
+                            "page_title": item.get("page_title", ""),
+                            "application_url": item.get("application_url", item.get("url")),
+                        }
+                    )
+                if public_rows:
+                    st.dataframe(
+                        pd.DataFrame(public_rows),
+                        width="stretch",
+                        hide_index=True,
+                        column_config={
+                            "application_url": st.column_config.LinkColumn(
+                                "Apply link",
+                                display_text="Open application",
+                            )
+                        },
+                    )
+
+                public_failures = latest_public_scan.get("failures", [])
+                if public_failures:
+                    with st.expander("Public scan failures"):
+                        public_failure_rows = []
+                        for failure in public_failures:
+                            attempts = failure.get("attempts", [])
+                            attempts_text = " | ".join(
+                                f"{a.get('url', '')} => {a.get('error', '')}" for a in attempts
+                            )
+                            public_failure_rows.append(
+                                {
+                                    "source": failure.get("school"),
+                                    "url": failure.get("url"),
+                                    "error": failure.get("error"),
+                                    "attempts": attempts_text,
+                                }
+                            )
+                        st.dataframe(pd.DataFrame(public_failure_rows), width="stretch", hide_index=True)
+
+                public_skipped = latest_public_scan.get("skipped_sources", [])
+                if public_skipped:
+                    with st.expander("Skipped public sources"):
+                        st.dataframe(pd.DataFrame(public_skipped), width="stretch", hide_index=True)
+
+                public_save_stats = st.session_state.get("latest_public_save_stats")
+                if public_save_stats:
+                    st.caption(
+                        f"Public auto-save: inserted {public_save_stats['inserted']}, "
+                        f"updated {public_save_stats['updated']}, failures {len(public_save_stats['failures'])}."
+                    )
+                    if public_save_stats["failures"]:
+                        with st.expander("Public auto-save failures"):
+                            st.dataframe(pd.DataFrame(public_save_stats["failures"]), width="stretch", hide_index=True)
+            else:
+                st.error("Public scholarship scan failed.")
+
         with st.form("add_scholarship_form", clear_on_submit=True):
             st.markdown("### Add Scholarship")
             c1, c2 = st.columns(2)
             with c1:
                 title = st.text_input("Scholarship Title *")
                 target_school = st.text_input("Target School")
+                application_url = st.text_input("Application Link")
                 country = st.radio("Country *", ["US", "Canada"], horizontal=True)
                 currency = st.radio("Currency *", ["USD", "CAD"], horizontal=True)
                 award_amount = st.number_input("Award Amount", min_value=0.0, step=500.0)
@@ -405,6 +618,7 @@ def main() -> None:
                     "country": country,
                     "award_amount": award_amount,
                     "currency": currency,
+                    "application_url": application_url,
                     "application_deadline": app_deadline_str,
                     "status": status,
                     "requires_hs_nomination": requires_nomination,

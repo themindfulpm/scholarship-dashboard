@@ -10,6 +10,7 @@ from __future__ import annotations
 import sqlite3
 from datetime import datetime
 from email.utils import parsedate_to_datetime
+from urllib.parse import urljoin
 from typing import Any, Dict, List, Optional
 
 import feedparser
@@ -86,6 +87,75 @@ def _find_keyword_hits(text: str, keywords: List[str]) -> List[str]:
     return [kw for kw in keywords if kw in text_l]
 
 
+def _extract_page_title(soup: BeautifulSoup, feed_entries: List[Any]) -> str:
+    if feed_entries:
+        first_entry = feed_entries[0]
+        title = str(getattr(first_entry, "title", "") or "").strip()
+        if title:
+            return title
+    if soup.title and soup.title.string:
+        title = soup.title.string.strip()
+        if title:
+            return title
+    return ""
+
+
+def _extract_application_link(soup: BeautifulSoup, base_url: str) -> Dict[str, str]:
+    keyword_boosts = [
+        "apply",
+        "application",
+        "apply now",
+        "application form",
+        "submit",
+        "portal",
+        "scholarship application",
+        "award application",
+        "open application",
+        "apply here",
+    ]
+
+    candidates: List[Dict[str, str]] = []
+    for anchor in soup.find_all("a", href=True):
+        href = str(anchor.get("href", "")).strip()
+        if not href or href.startswith(("#", "mailto:", "tel:", "javascript:")):
+            continue
+
+        absolute_url = urljoin(base_url, href)
+        anchor_text = " ".join(anchor.get_text(" ", strip=True).split())
+        link_text_l = anchor_text.lower()
+        href_l = href.lower()
+
+        score = 0
+        if any(keyword in link_text_l for keyword in keyword_boosts):
+            score += 3
+        if any(keyword in href_l for keyword in keyword_boosts):
+            score += 2
+        if "scholar" in link_text_l or "scholar" in href_l:
+            score += 1
+
+        if score > 0:
+            candidates.append(
+                {
+                    "application_url": absolute_url,
+                    "application_link_text": anchor_text,
+                    "score": str(score),
+                }
+            )
+
+    if candidates:
+        candidates.sort(key=lambda item: int(item.get("score", "0")), reverse=True)
+        best = candidates[0]
+        return {
+            "application_url": best["application_url"],
+            "application_link_text": best["application_link_text"],
+        }
+
+    return {
+        "application_url": base_url,
+        "application_link_text": "Source page",
+    }
+
+
 def scrape_scholarship_page(
     url: str,
     country: str,
@@ -112,6 +182,9 @@ def scrape_scholarship_page(
         "indicator_hits": [],
         "auto_nomination_hits": [],
         "custom_keyword_hits": [],
+        "page_title": "",
+        "application_url": "",
+        "application_link_text": "",
         "matched_excerpt": "",
         "notes": "",
     }
@@ -176,6 +249,10 @@ def scrape_scholarship_page(
     else:
         aggregated_text = _safe_text_from_html(body)
 
+    soup = BeautifulSoup(body, "html.parser")
+    page_title = _extract_page_title(soup, feed_entries)
+    app_link = _extract_application_link(soup, final_url or url)
+
     if not aggregated_text:
         result["error"] = "No parseable text found (missing tags or empty response body)."
         result["notes"] = "Page structure may be script-rendered; try alternate source URLs/RSS endpoints."
@@ -206,6 +283,9 @@ def scrape_scholarship_page(
             "indicator_hits": indicator_hits,
             "auto_nomination_hits": auto_nomination_hits,
             "custom_keyword_hits": custom_keyword_hits,
+            "page_title": page_title,
+            "application_url": app_link.get("application_url", final_url or url),
+            "application_link_text": app_link.get("application_link_text", "Source page"),
             "matched_excerpt": excerpt,
             "notes": (
                 "Auto nomination set to True due to counselor/school endorsement keyword."

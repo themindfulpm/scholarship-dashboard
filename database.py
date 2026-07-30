@@ -21,6 +21,7 @@ from scholarship_db import (  # re-exported core API
 
 
 def _connect() -> sqlite3.Connection:
+    init_db()
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
@@ -96,10 +97,14 @@ def upsert_scraped_scholarship(
     country: str,
     requires_hs_nomination: bool,
     notes: str,
+    application_url: str = "",
+    title: str = "",
+    target_school: str = "",
 ) -> Dict[str, Any]:
     """Insert or update a scraped scholarship draft using source URL as natural key."""
     currency = "CAD" if country == "Canada" else "USD"
-    title = f"{school} scholarship opportunity"
+    title_value = title.strip() or f"{school} scholarship opportunity"
+    target_school_value = target_school.strip() or school
 
     try:
         with _connect() as conn:
@@ -110,7 +115,7 @@ def upsert_scraped_scholarship(
                   AND notes LIKE ?
                 LIMIT 1
                 """,
-                (school, f"%Source URL: {source_url}%"),
+                (target_school_value, f"%Source URL: {source_url}%"),
             ).fetchone()
 
             normalized_notes = f"Source URL: {source_url}\n{notes}".strip()
@@ -124,20 +129,22 @@ def upsert_scraped_scholarship(
                         country,
                         award_amount,
                         currency,
+                        application_url,
                         status,
                         requires_hs_nomination,
                         nomination_status,
                         essay_required,
                         notes
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
-                        title,
-                        school,
+                        title_value,
+                        target_school_value,
                         country,
                         0,
                         currency,
+                        application_url.strip() or source_url,
                         "Not Started",
                         int(requires_hs_nomination),
                         "Not Requested",
@@ -155,11 +162,21 @@ def upsert_scraped_scholarship(
                 """
                 UPDATE scholarships
                 SET
+                    title = ?,
+                    target_school = ?,
+                    application_url = ?,
                     requires_hs_nomination = ?,
                     notes = ?
                 WHERE id = ?
                 """,
-                (int(requires_hs_nomination), normalized_notes, existing["id"]),
+                (
+                    title_value,
+                    target_school_value,
+                    application_url.strip() or source_url,
+                    int(requires_hs_nomination),
+                    normalized_notes,
+                    existing["id"],
+                ),
             )
             row = conn.execute(
                 "SELECT * FROM scholarships WHERE id = ?",

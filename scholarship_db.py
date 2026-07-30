@@ -68,6 +68,8 @@ def _ensure_schema_migrations(conn: sqlite3.Connection) -> None:
         conn.execute(
             "ALTER TABLE scholarships ADD COLUMN is_eligible INTEGER CHECK (is_eligible IN (0, 1))"
         )
+    if not _column_exists(conn, "scholarships", "application_url"):
+        conn.execute("ALTER TABLE scholarships ADD COLUMN application_url TEXT")
 
 
 def init_db() -> Dict[str, Any]:
@@ -89,6 +91,7 @@ def init_db() -> Dict[str, Any]:
                     currency TEXT NOT NULL CHECK (currency IN ('USD', 'CAD')),
                     scholarship_min_gpa REAL,
                     is_eligible INTEGER CHECK (is_eligible IN (0, 1)),
+                    application_url TEXT,
                     application_deadline TEXT,
                     status TEXT NOT NULL DEFAULT 'Not Started'
                         CHECK (status IN ('Not Started', 'In Progress', 'Submitted', 'Awarded', 'Rejected')),
@@ -166,7 +169,7 @@ def add_scholarship(data_dict: Dict[str, Any]) -> Dict[str, Any]:
                 """
                 INSERT INTO scholarships (
                     title, target_school, country, award_amount, currency, scholarship_min_gpa, is_eligible,
-                    application_deadline, status, requires_hs_nomination,
+                    application_url, application_deadline, status, requires_hs_nomination,
                     nomination_deadline, nomination_status, essay_required, notes
                 )
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -183,6 +186,7 @@ def add_scholarship(data_dict: Dict[str, Any]) -> Dict[str, Any]:
                         if data_dict.get("is_eligible") is not None
                         else None
                     ),
+                    data_dict.get("application_url"),
                     data_dict.get("application_deadline"),
                     status,
                     int(bool(data_dict.get("requires_hs_nomination", False))),

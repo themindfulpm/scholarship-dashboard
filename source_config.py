@@ -95,6 +95,47 @@ SOURCE_CATALOG = [
     },
 ]
 
+PUBLIC_SOURCE_CATALOG = [
+    {
+        "school": "Scholarships.com Directory",
+        "country": "US",
+        "enabled": True,
+        "url": "https://www.scholarships.com/financial-aid/college-scholarships/scholarship-directory/",
+        "urls": [
+            "https://www.scholarships.com/financial-aid/college-scholarships/scholarship-directory/",
+        ],
+        "priority": "high",
+        "school_type": "Public",
+    },
+    {
+        "school": "Fastweb Scholarships",
+        "country": "US",
+        "enabled": True,
+        "url": "https://www.fastweb.com/college-scholarships",
+        "urls": ["https://www.fastweb.com/college-scholarships"],
+        "priority": "high",
+        "school_type": "Public",
+    },
+    {
+        "school": "Bold.org Scholarships",
+        "country": "US",
+        "enabled": True,
+        "url": "https://bold.org/scholarships/",
+        "urls": ["https://bold.org/scholarships/"],
+        "priority": "high",
+        "school_type": "Public",
+    },
+    {
+        "school": "Unigo Scholarships",
+        "country": "US",
+        "enabled": True,
+        "url": "https://www.unigo.com/scholarships",
+        "urls": ["https://www.unigo.com/scholarships"],
+        "priority": "high",
+        "school_type": "Public",
+    },
+]
+
 DEFAULT_AUTO_PULL_KEYWORDS = [
     "construction management",
     "building science",
@@ -108,6 +149,46 @@ DEFAULT_AUTO_PULL_KEYWORDS = [
     "tuition award",
     "leadership scholarship",
 ]
+
+PUBLIC_SEARCH_CRITERIA = {
+    "public_keywords": [
+        "scholarship",
+        "award",
+        "grant",
+        "fellowship",
+        "funding",
+        "open to all",
+        "public scholarship",
+        "national scholarship",
+    ],
+    "major_keywords": [
+        "construction management",
+        "construction",
+        "building science",
+        "civil engineering",
+        "architecture",
+        "project management",
+        "engineering",
+        "built environment",
+        "skilled trades",
+        "real estate",
+    ],
+    "audience_keywords": [
+        "black",
+        "african american",
+        "black male",
+        "men",
+        "male",
+        "young men",
+        "diversity",
+        "minority",
+        "underrepresented",
+        "bipoc",
+    ],
+    "countries": ["US", "Canada"],
+    "target_major": "Construction Management",
+    "target_profile": "Black male",
+}
 
 AUTO_PULL_COUNTRIES = ["US", "Canada"]
 
