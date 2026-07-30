@@ -9,6 +9,7 @@ import streamlit as st
 
 import database as db
 import scraper
+from seed_data import seed_initial_scholarships
 from source_config import AUTO_PULL_COUNTRIES, AUTO_PULL_CRITERIA, DEFAULT_AUTO_PULL_KEYWORDS, SOURCE_CATALOG
 
 
@@ -128,6 +129,16 @@ def main() -> None:
     if not init_result.get("success"):
         st.error(f"Database initialization error: {init_result.get('error')}")
         st.stop()
+
+    if not st.session_state.get("startup_seed_checked"):
+        st.session_state["startup_seed_checked"] = True
+        scholarship_check = db.get_scholarships()
+        if scholarship_check.get("success") and not scholarship_check.get("data"):
+            seed_result = seed_initial_scholarships()
+            if not seed_result.get("success"):
+                st.warning(f"Startup seed warning: {seed_result.get('error', 'Unable to seed scholarships.')}")
+            else:
+                st.toast("Seeded target schools and scholarships.")
 
     st.sidebar.header("Filters")
     country_filter = st.sidebar.selectbox("Filter by Country", ["All", "US", "Canada"])
