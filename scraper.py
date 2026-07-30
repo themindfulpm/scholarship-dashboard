@@ -21,6 +21,7 @@ from bs4 import BeautifulSoup
 
 REQUEST_TIMEOUT_SECONDS = 20
 PUBLIC_MIN_QUALITY_SCORE = 7
+PUBLIC_MAX_MATCHES_PER_SOURCE = 8
 
 INDICATOR_KEYWORDS = [
     "school nomination",
@@ -315,7 +316,12 @@ def _extract_application_link(soup: BeautifulSoup, base_url: str) -> Dict[str, s
     }
 
 
-def _extract_opportunity_links(soup: BeautifulSoup, base_url: str, max_links: int = 5) -> List[Dict[str, str]]:
+def _extract_opportunity_links(
+    soup: BeautifulSoup,
+    base_url: str,
+    required_keywords: Optional[List[str]] = None,
+    max_links: int = 15,
+) -> List[Dict[str, str]]:
     opportunity_keywords = [
         "scholar",
         "award",
@@ -338,6 +344,8 @@ def _extract_opportunity_links(soup: BeautifulSoup, base_url: str, max_links: in
         "terms",
         "rss",
     ]
+
+    keyword_tokens = [kw.strip().lower() for kw in (required_keywords or []) if kw.strip()]
 
     candidates: List[Dict[str, str]] = []
     seen_urls = set()
@@ -362,6 +370,9 @@ def _extract_opportunity_links(soup: BeautifulSoup, base_url: str, max_links: in
             score += 3
         if any(keyword in href_l for keyword in opportunity_keywords):
             score += 2
+        if keyword_tokens:
+            keyword_hits = sum(1 for kw in keyword_tokens if kw in link_text_l or kw in href_l)
+            score += min(4, keyword_hits)
         if len(anchor_text.split()) >= 3:
             score += 1
 
@@ -479,7 +490,11 @@ def scrape_scholarship_page(
     soup = BeautifulSoup(body, "html.parser")
     page_title = _extract_page_title(soup, feed_entries)
     app_link = _extract_application_link(soup, final_url or url)
-    opportunity_links = _extract_opportunity_links(soup, final_url or url)
+    opportunity_links = _extract_opportunity_links(
+        soup,
+        final_url or url,
+        required_keywords=custom_keywords,
+    )
     min_gpa = _extract_min_gpa(aggregated_text)
     application_deadline = _extract_application_deadline(aggregated_text)
     is_list_page = _is_listicle_or_directory_page(page_title, aggregated_text)
@@ -739,6 +754,15 @@ def scan_scholarship_sources(
                         }
                     )
 
+            # Keep the source page as a fallback candidate in case detailed links are sparse.
+            candidate_results.append(
+                {
+                    "result": scrape_result,
+                    "resolved_url": resolved_url or url,
+                    "opportunity_link_score": 0,
+                }
+            )
+
         if candidate_results:
             public_candidates = candidate_results
         else:
@@ -827,7 +851,7 @@ def scan_scholarship_sources(
                 }
             )
 
-            if is_public_source and emitted_for_source >= 3:
+            if is_public_source and emitted_for_source >= PUBLIC_MAX_MATCHES_PER_SOURCE:
                 break
 
     return {

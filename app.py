@@ -136,6 +136,17 @@ def _link_display_df(df: pd.DataFrame) -> pd.DataFrame:
     return display_df
 
 
+def _parse_extra_keywords(raw_text: str) -> List[str]:
+    if not raw_text:
+        return []
+    values = []
+    for chunk in raw_text.split(","):
+        keyword = chunk.strip().lower()
+        if keyword:
+            values.append(keyword)
+    return list(dict.fromkeys(values))
+
+
 def main() -> None:
     st.set_page_config(
         page_title="Fall 2027 Scholarship & Application Engine (US & Canada)",
@@ -494,7 +505,17 @@ def main() -> None:
             value=True,
             key="include_major_related",
         )
+        extra_public_keywords = st.text_input(
+            "Extra public keywords (comma-separated)",
+            value="",
+            key="extra_public_keywords",
+            help="Use this to add terms beyond the preset keyword list.",
+        )
         public_auto_save = st.checkbox("Auto-save public matches to tracker", value=True, key="public_auto_save")
+        if st.button("Clear previous public scan results", key="clear_public_scan_results"):
+            st.session_state.pop("latest_public_scan", None)
+            st.session_state.pop("latest_public_save_stats", None)
+            st.rerun()
 
         if st.button("Run public scholarship scan", key="run_public_scan"):
             final_public_keywords = list(public_keywords)
@@ -520,6 +541,10 @@ def main() -> None:
                     "architecture",
                     "engineer",
                 ])
+
+            final_public_keywords.extend(_parse_extra_keywords(extra_public_keywords))
+            final_public_keywords = list(dict.fromkeys(kw.strip().lower() for kw in final_public_keywords if kw.strip()))
+            st.caption(f"Running public scan with {len(final_public_keywords)} keywords.")
 
             public_scan_result = scraper.scan_scholarship_sources(
                 sources=PUBLIC_SOURCE_CATALOG,
