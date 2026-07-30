@@ -9,7 +9,7 @@ import streamlit as st
 
 import database as db
 import scraper
-from seed_data import seed_initial_scholarships
+from seed_data import backfill_seed_application_urls, seed_initial_scholarships
 from source_config import (
     AUTO_PULL_COUNTRIES,
     AUTO_PULL_CRITERIA,
@@ -143,6 +143,18 @@ def main() -> None:
     if not init_result.get("success"):
         st.error(f"Database initialization error: {init_result.get('error')}")
         st.stop()
+
+    backfill_result = db.backfill_application_urls()
+    if not backfill_result.get("success"):
+        st.warning(
+            f"Apply link backfill warning: {backfill_result.get('error', 'Unable to backfill application links.')}"
+        )
+
+    seed_link_backfill = backfill_seed_application_urls()
+    if not seed_link_backfill.get("success"):
+        st.warning(
+            f"Seed apply link backfill warning: {seed_link_backfill.get('error', 'Unable to backfill seed links.')}"
+        )
 
     if not st.session_state.get("startup_seed_checked"):
         st.session_state["startup_seed_checked"] = True

@@ -503,6 +503,9 @@ def scan_scholarship_sources(
                 "auto_nomination_hits": scrape_result.get("auto_nomination_hits", []),
                 "matched_required_keywords": matched_required_keywords,
                 "matched_excerpt": scrape_result.get("matched_excerpt", ""),
+                "page_title": scrape_result.get("page_title", ""),
+                "application_url": scrape_result.get("application_url", resolved_url or url),
+                "application_link_text": scrape_result.get("application_link_text", "Source page"),
                 "source_type": scrape_result.get("source_type"),
             }
         )

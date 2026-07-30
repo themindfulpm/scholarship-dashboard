@@ -93,6 +93,7 @@ def _upsert_scholarship(seed: Dict[str, Any], student_gpa: float) -> Dict[str, A
             "currency": seed["currency"],
             "scholarship_min_gpa": scholarship_min_gpa,
             "is_eligible": is_eligible,
+            "application_url": seed.get("application_url"),
             "application_deadline": seed.get("application_deadline"),
             "status": seed.get("status", "Not Started"),
             "requires_hs_nomination": bool(seed.get("requires_hs_nomination", False)),
@@ -114,6 +115,7 @@ def _upsert_scholarship(seed: Dict[str, Any], student_gpa: float) -> Dict[str, A
                 currency = ?,
                 scholarship_min_gpa = ?,
                 is_eligible = ?,
+                application_url = ?,
                 application_deadline = ?,
                 status = ?,
                 requires_hs_nomination = ?,
@@ -129,6 +131,7 @@ def _upsert_scholarship(seed: Dict[str, Any], student_gpa: float) -> Dict[str, A
                 payload["currency"],
                 payload["scholarship_min_gpa"],
                 payload["is_eligible"],
+                payload["application_url"],
                 payload["application_deadline"],
                 payload["status"],
                 int(payload["requires_hs_nomination"]),
@@ -222,6 +225,7 @@ def seed_initial_scholarships() -> Dict[str, Any]:
                 "currency": "USD",
                 "award_amount": 8000,
                 "scholarship_min_gpa": 3.0,
+                "application_url": "https://www.morgan.edu/financial-aid/scholarships",
                 "notes": "Top Choice / HBCU | Major: Construction Management | Target Awards: Institutional Merit",
             },
             {
@@ -231,6 +235,7 @@ def seed_initial_scholarships() -> Dict[str, Any]:
                 "currency": "USD",
                 "award_amount": 3000,
                 "scholarship_min_gpa": 3.0,
+                "application_url": "https://www.morgan.edu/financial-aid/scholarships",
                 "notes": "Major: Construction Management | Departmental award track",
             },
             {
@@ -240,6 +245,7 @@ def seed_initial_scholarships() -> Dict[str, Any]:
                 "currency": "USD",
                 "award_amount": 4000,
                 "scholarship_min_gpa": 3.0,
+                "application_url": "https://www.kennesaw.edu/financial-aid/types-of-aid/scholarships.php",
                 "notes": "In-State / Regional | Major: Construction Management",
             },
             {
@@ -249,6 +255,7 @@ def seed_initial_scholarships() -> Dict[str, Any]:
                 "currency": "CAD",
                 "award_amount": 5000,
                 "scholarship_min_gpa": 3.0,
+                "application_url": "https://www.georgebrown.ca/international/tuition-and-scholarships",
                 "notes": (
                     "International / Toronto | Major: Honours Bachelor of Technology "
                     "(Construction Management) | Target Awards: International Student Entrance Scholarships"
@@ -261,6 +268,7 @@ def seed_initial_scholarships() -> Dict[str, Any]:
                 "currency": "CAD",
                 "award_amount": 3500,
                 "scholarship_min_gpa": 3.0,
+                "application_url": "https://www.georgebrown.ca/international/tuition-and-scholarships",
                 "notes": (
                     "Major: Honours Bachelor of Technology (Construction Management) | "
                     "Target Awards: Angelo DelZotto School of Construction Management Awards"
@@ -273,6 +281,7 @@ def seed_initial_scholarships() -> Dict[str, Any]:
                 "currency": "USD",
                 "award_amount": 6000,
                 "scholarship_min_gpa": 3.0,
+                "application_url": "https://www.ncat.edu/admissions/financial-aid/",
                 "notes": "HBCU | Major: Construction Management",
             },
             {
@@ -282,6 +291,7 @@ def seed_initial_scholarships() -> Dict[str, Any]:
                 "currency": "USD",
                 "award_amount": 6000,
                 "scholarship_min_gpa": 3.0,
+                "application_url": "https://www.famu.edu/students/financial-aid/scholarships/index.php",
                 "notes": "HBCU | Major: Construction Management",
             },
             {
@@ -291,6 +301,7 @@ def seed_initial_scholarships() -> Dict[str, Any]:
                 "currency": "USD",
                 "award_amount": 5000,
                 "scholarship_min_gpa": 2.8,
+                "application_url": "https://www.tsu.edu/financial-aid/scholarships/",
                 "notes": "HBCU | Major: Construction Management",
             },
             {
@@ -300,6 +311,7 @@ def seed_initial_scholarships() -> Dict[str, Any]:
                 "currency": "USD",
                 "award_amount": 7000,
                 "scholarship_min_gpa": 3.2,
+                "application_url": "https://wit.edu/admissions/tuition-financial-aid/scholarships",
                 "notes": "Major: Construction Management",
             },
         ]
@@ -346,6 +358,40 @@ def seed_initial_scholarships() -> Dict[str, Any]:
         }
     except sqlite3.Error as exc:
         return {"success": False, "error": f"Failed to seed scholarships: {exc}"}
+
+
+def backfill_seed_application_urls() -> Dict[str, Any]:
+    """Populate application URLs for existing seeded scholarships."""
+    url_map = {
+        ("Morgan State Institutional Merit", "Morgan State University"): "https://www.morgan.edu/financial-aid/scholarships",
+        ("Morgan State Departmental Construction Management Scholarship", "Morgan State University"): "https://www.morgan.edu/financial-aid/scholarships",
+        ("Kennesaw State Merit Scholarship", "Kennesaw State University"): "https://www.kennesaw.edu/financial-aid/types-of-aid/scholarships.php",
+        ("George Brown International Student Entrance Scholarship", "George Brown College"): "https://www.georgebrown.ca/international/tuition-and-scholarships",
+        ("George Brown Angelo DelZotto School Award", "George Brown College"): "https://www.georgebrown.ca/international/tuition-and-scholarships",
+        ("North Carolina A&T Merit Scholarship", "North Carolina A&T State University"): "https://www.ncat.edu/admissions/financial-aid/",
+        ("Florida A&M Merit Scholarship", "Florida A&M University"): "https://www.famu.edu/students/financial-aid/scholarships/index.php",
+        ("Texas Southern Merit Scholarship", "Texas Southern University"): "https://www.tsu.edu/financial-aid/scholarships/",
+        ("Wentworth Merit Scholarship", "Wentworth Institute of Technology"): "https://wit.edu/admissions/tuition-financial-aid/scholarships",
+    }
+
+    try:
+        updated = 0
+        with _connect() as conn:
+            for (title, target_school), application_url in url_map.items():
+                cursor = conn.execute(
+                    """
+                    UPDATE scholarships
+                    SET application_url = ?
+                    WHERE title = ?
+                      AND target_school = ?
+                      AND (application_url IS NULL OR TRIM(application_url) = '')
+                    """,
+                    (application_url, title, target_school),
+                )
+                updated += cursor.rowcount
+        return {"success": True, "updated": updated}
+    except sqlite3.Error as exc:
+        return {"success": False, "error": f"Failed to backfill seeded application URLs: {exc}"}
 
 
 if __name__ == "__main__":

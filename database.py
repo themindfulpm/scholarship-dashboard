@@ -38,6 +38,37 @@ def has_scholarships() -> Dict[str, Any]:
         return {"success": False, "error": f"Failed to check scholarship existence: {exc}"}
 
 
+def backfill_application_urls() -> Dict[str, Any]:
+    """Populate blank application_url values from the stored Source URL note when possible."""
+    try:
+        updated = 0
+        with _connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, application_url, notes
+                FROM scholarships
+                WHERE application_url IS NULL OR TRIM(application_url) = ''
+                """
+            ).fetchall()
+
+            for row in rows:
+                notes = row["notes"] or ""
+                source_url = ""
+                for line in notes.splitlines():
+                    if line.startswith("Source URL:"):
+                        source_url = line.split("Source URL:", 1)[1].strip()
+                        break
+                if source_url:
+                    conn.execute(
+                        "UPDATE scholarships SET application_url = ? WHERE id = ?",
+                        (source_url, row["id"]),
+                    )
+                    updated += 1
+        return {"success": True, "updated": updated}
+    except sqlite3.Error as exc:
+        return {"success": False, "error": f"Failed to backfill application URLs: {exc}"}
+
+
 def get_essays() -> Dict[str, Any]:
     """Return all master essays as a list of dicts."""
     try:
