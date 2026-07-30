@@ -146,7 +146,7 @@ def main() -> None:
 
     if not st.session_state.get("startup_seed_checked"):
         st.session_state["startup_seed_checked"] = True
-        scholarship_check = db.get_scholarships()
+        scholarship_check = db.has_scholarships()
         needs_seed = (not scholarship_check.get("success")) or (not scholarship_check.get("data"))
         if needs_seed:
             seed_result = seed_initial_scholarships()

@@ -28,6 +28,16 @@ def _connect() -> sqlite3.Connection:
     return conn
 
 
+def has_scholarships() -> Dict[str, Any]:
+    """Return whether the scholarships table contains at least one row."""
+    try:
+        with _connect() as conn:
+            row = conn.execute("SELECT 1 FROM scholarships LIMIT 1").fetchone()
+        return {"success": True, "data": bool(row)}
+    except sqlite3.Error as exc:
+        return {"success": False, "error": f"Failed to check scholarship existence: {exc}"}
+
+
 def get_essays() -> Dict[str, Any]:
     """Return all master essays as a list of dicts."""
     try:
