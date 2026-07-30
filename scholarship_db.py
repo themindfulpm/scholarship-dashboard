@@ -172,7 +172,7 @@ def add_scholarship(data_dict: Dict[str, Any]) -> Dict[str, Any]:
                     application_url, application_deadline, status, requires_hs_nomination,
                     nomination_deadline, nomination_status, essay_required, notes
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     data_dict.get("title"),
