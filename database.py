@@ -87,3 +87,84 @@ def set_variant_target_word_limit(variant_id: int, target_word_limit: int) -> Di
         return {"success": True}
     except sqlite3.Error as exc:
         return {"success": False, "error": f"Failed to update target word limit: {exc}"}
+
+
+def upsert_scraped_scholarship(
+    *,
+    source_url: str,
+    school: str,
+    country: str,
+    requires_hs_nomination: bool,
+    notes: str,
+) -> Dict[str, Any]:
+    """Insert or update a scraped scholarship draft using source URL as natural key."""
+    currency = "CAD" if country == "Canada" else "USD"
+    title = f"{school} scholarship opportunity"
+
+    try:
+        with _connect() as conn:
+            existing = conn.execute(
+                """
+                SELECT id FROM scholarships
+                WHERE target_school = ?
+                  AND notes LIKE ?
+                LIMIT 1
+                """,
+                (school, f"%Source URL: {source_url}%"),
+            ).fetchone()
+
+            normalized_notes = f"Source URL: {source_url}\n{notes}".strip()
+
+            if existing is None:
+                cursor = conn.execute(
+                    """
+                    INSERT INTO scholarships (
+                        title,
+                        target_school,
+                        country,
+                        award_amount,
+                        currency,
+                        status,
+                        requires_hs_nomination,
+                        nomination_status,
+                        essay_required,
+                        notes
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        title,
+                        school,
+                        country,
+                        0,
+                        currency,
+                        "Not Started",
+                        int(requires_hs_nomination),
+                        "Not Requested",
+                        1,
+                        normalized_notes,
+                    ),
+                )
+                row = conn.execute(
+                    "SELECT * FROM scholarships WHERE id = ?",
+                    (cursor.lastrowid,),
+                ).fetchone()
+                return {"success": True, "action": "inserted", "data": dict(row)}
+
+            conn.execute(
+                """
+                UPDATE scholarships
+                SET
+                    requires_hs_nomination = ?,
+                    notes = ?
+                WHERE id = ?
+                """,
+                (int(requires_hs_nomination), normalized_notes, existing["id"]),
+            )
+            row = conn.execute(
+                "SELECT * FROM scholarships WHERE id = ?",
+                (existing["id"],),
+            ).fetchone()
+            return {"success": True, "action": "updated", "data": dict(row)}
+    except sqlite3.Error as exc:
+        return {"success": False, "error": f"Failed to upsert scraped scholarship: {exc}"}

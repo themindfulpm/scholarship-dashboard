@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from datetime import date
 from typing import Dict, List, Optional
+from urllib.parse import urlparse
 
 import pandas as pd
 import streamlit as st
 
 import database as db
+import scraper
+from source_config import AUTO_PULL_COUNTRIES, AUTO_PULL_CRITERIA, DEFAULT_AUTO_PULL_KEYWORDS, SOURCE_CATALOG
 
 
 STATUS_OPTIONS = ["Not Started", "In Progress", "Submitted", "Awarded", "Rejected"]
@@ -106,6 +109,14 @@ def _highlight_urgent_nomination_rows(dataframe: pd.DataFrame) -> pd.io.formats.
     return dataframe.style.apply(apply_row_style, axis=1)
 
 
+def _draft_title_from_url(url: str) -> str:
+    parsed = urlparse(url)
+    host = parsed.netloc.replace("www.", "")
+    if not host:
+        return "Scraped Scholarship Opportunity"
+    return f"{host} scholarship opportunity"
+
+
 def main() -> None:
     st.set_page_config(
         page_title="Fall 2027 Scholarship & Application Engine (US & Canada)",
@@ -169,6 +180,182 @@ def main() -> None:
             styled = _highlight_urgent_nomination_rows(table_df)
             st.dataframe(styled, width="stretch", hide_index=True)
             st.caption("Rows in red indicate HS nomination deadlines within 30 days.")
+
+        st.markdown("### Pull scholarship info from a school page or RSS")
+        with st.form("scrape_scholarship_form", clear_on_submit=False):
+            scrape_url = st.text_input("Scholarship page or RSS URL")
+            scrape_country = st.selectbox("Source country", ["US", "Canada"], key="scrape_country")
+            scrape_submit = st.form_submit_button("Analyze source")
+
+        if scrape_submit and scrape_url.strip():
+            scrape_result = scraper.scrape_scholarship_page(scrape_url.strip(), scrape_country)
+            st.session_state["latest_scrape_result"] = scrape_result
+            st.session_state["latest_scrape_url"] = scrape_url.strip()
+
+        latest_scrape = st.session_state.get("latest_scrape_result")
+        latest_scrape_url = st.session_state.get("latest_scrape_url", "")
+        if latest_scrape:
+            if latest_scrape.get("success"):
+                st.success("Source analyzed successfully.")
+                st.write(
+                    {
+                        "source_type": latest_scrape.get("source_type"),
+                        "requires_hs_nomination": latest_scrape.get("requires_hs_nomination"),
+                        "indicator_hits": latest_scrape.get("indicator_hits"),
+                        "auto_nomination_hits": latest_scrape.get("auto_nomination_hits"),
+                    }
+                )
+                if latest_scrape.get("matched_excerpt"):
+                    st.caption(f"Matched excerpt: {latest_scrape['matched_excerpt']}")
+
+                if st.button("Add as draft scholarship", key="add_scraped_draft"):
+                    notes = (
+                        f"Imported from source: {latest_scrape_url}\n"
+                        f"Indicator hits: {', '.join(latest_scrape.get('indicator_hits', [])) or 'none'}\n"
+                        f"Auto nomination hits: {', '.join(latest_scrape.get('auto_nomination_hits', [])) or 'none'}\n"
+                        f"Excerpt: {latest_scrape.get('matched_excerpt', '')}"
+                    )
+                    payload = {
+                        "title": _draft_title_from_url(latest_scrape_url),
+                        "target_school": "",
+                        "country": latest_scrape.get("country", "US"),
+                        "award_amount": 0,
+                        "currency": "CAD" if latest_scrape.get("country") == "Canada" else "USD",
+                        "status": "Not Started",
+                        "requires_hs_nomination": bool(latest_scrape.get("requires_hs_nomination", False)),
+                        "nomination_status": "Not Requested",
+                        "essay_required": True,
+                        "notes": notes,
+                    }
+                    add_result = db.add_scholarship(payload)
+                    if add_result.get("success"):
+                        st.success("Draft scholarship added to tracker.")
+                        st.rerun()
+                    else:
+                        st.error(add_result.get("error", "Could not add scraped draft."))
+            else:
+                st.error(latest_scrape.get("error", "Unable to analyze source URL."))
+
+        st.markdown("### Automatic pull (rules-based, no AI)")
+        configured_keywords = st.multiselect(
+            "Match keywords",
+            DEFAULT_AUTO_PULL_KEYWORDS,
+            default=AUTO_PULL_CRITERIA["required_keywords"],
+            key="auto_keywords",
+        )
+        configured_countries = st.multiselect(
+            "Countries to scan",
+            ["US", "Canada"],
+            default=AUTO_PULL_COUNTRIES,
+            key="auto_countries",
+        )
+        auto_save_matches = st.checkbox("Auto-save matches to tracker", value=True, key="auto_save_matches")
+
+        if st.button("Run automatic scan", key="run_auto_scan"):
+            scan_result = scraper.scan_scholarship_sources(
+                sources=SOURCE_CATALOG,
+                required_keywords=configured_keywords,
+                country_filter=configured_countries,
+            )
+            st.session_state["latest_auto_scan"] = scan_result
+
+            if scan_result.get("success") and auto_save_matches:
+                inserted = 0
+                updated = 0
+                save_failures = []
+                for match in scan_result.get("matches", []):
+                    notes = (
+                        f"Indicator hits: {', '.join(match.get('indicator_hits', [])) or 'none'}\n"
+                        f"Auto nomination hits: {', '.join(match.get('auto_nomination_hits', [])) or 'none'}\n"
+                        f"Matched required keywords: {', '.join(match.get('matched_required_keywords', [])) or 'none'}\n"
+                        f"Excerpt: {match.get('matched_excerpt', '')}"
+                    )
+                    upsert_result = db.upsert_scraped_scholarship(
+                        source_url=match["url"],
+                        school=match["school"],
+                        country=match["country"],
+                        requires_hs_nomination=match["requires_hs_nomination"],
+                        notes=notes,
+                    )
+                    if not upsert_result.get("success"):
+                        save_failures.append(
+                            {
+                                "school": match["school"],
+                                "error": upsert_result.get("error", "Unknown upsert error"),
+                            }
+                        )
+                        continue
+
+                    if upsert_result.get("action") == "inserted":
+                        inserted += 1
+                    else:
+                        updated += 1
+
+                st.session_state["latest_auto_save_stats"] = {
+                    "inserted": inserted,
+                    "updated": updated,
+                    "failures": save_failures,
+                }
+                st.rerun()
+
+        latest_auto_scan = st.session_state.get("latest_auto_scan")
+        if latest_auto_scan:
+            if latest_auto_scan.get("success"):
+                st.success(
+                    f"Scanned {latest_auto_scan.get('scanned_count', 0)} sources; "
+                    f"matched {latest_auto_scan.get('matched_count', 0)} opportunities."
+                )
+                match_rows = latest_auto_scan.get("matches", [])
+                if match_rows:
+                    display_rows = []
+                    for item in match_rows:
+                        display_rows.append(
+                            {
+                                "school": item.get("school"),
+                                "country": item.get("country"),
+                                "requires_hs_nomination": item.get("requires_hs_nomination"),
+                                "matched_keywords": ", ".join(item.get("matched_required_keywords", [])) or "(none)",
+                                "source_type": item.get("source_type"),
+                                "url": item.get("url"),
+                            }
+                        )
+                    st.dataframe(pd.DataFrame(display_rows), width="stretch", hide_index=True)
+
+                failures = latest_auto_scan.get("failures", [])
+                if failures:
+                    with st.expander("Scan failures"):
+                        failure_rows = []
+                        for failure in failures:
+                            attempts = failure.get("attempts", [])
+                            attempts_text = " | ".join(
+                                f"{a.get('url', '')} => {a.get('error', '')}" for a in attempts
+                            )
+                            failure_rows.append(
+                                {
+                                    "school": failure.get("school"),
+                                    "url": failure.get("url"),
+                                    "error": failure.get("error"),
+                                    "attempts": attempts_text,
+                                }
+                            )
+                        st.dataframe(pd.DataFrame(failure_rows), width="stretch", hide_index=True)
+
+                skipped_sources = latest_auto_scan.get("skipped_sources", [])
+                if skipped_sources:
+                    with st.expander("Skipped sources"):
+                        st.dataframe(pd.DataFrame(skipped_sources), width="stretch", hide_index=True)
+
+                save_stats = st.session_state.get("latest_auto_save_stats")
+                if save_stats:
+                    st.caption(
+                        f"Auto-save results: inserted {save_stats['inserted']}, "
+                        f"updated {save_stats['updated']}, failures {len(save_stats['failures'])}."
+                    )
+                    if save_stats["failures"]:
+                        with st.expander("Auto-save failures"):
+                            st.dataframe(pd.DataFrame(save_stats["failures"]), width="stretch", hide_index=True)
+            else:
+                st.error("Automatic scan failed.")
 
         with st.form("add_scholarship_form", clear_on_submit=True):
             st.markdown("### Add Scholarship")

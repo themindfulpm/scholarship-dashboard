@@ -86,7 +86,11 @@ def _find_keyword_hits(text: str, keywords: List[str]) -> List[str]:
     return [kw for kw in keywords if kw in text_l]
 
 
-def scrape_scholarship_page(url: str, country: str) -> Dict[str, Any]:
+def scrape_scholarship_page(
+    url: str,
+    country: str,
+    custom_keywords: Optional[List[str]] = None,
+) -> Dict[str, Any]:
     """Fetch and parse scholarship content from HTML or RSS.
 
     Args:
@@ -107,6 +111,7 @@ def scrape_scholarship_page(url: str, country: str) -> Dict[str, Any]:
         "requires_hs_nomination": False,
         "indicator_hits": [],
         "auto_nomination_hits": [],
+        "custom_keyword_hits": [],
         "matched_excerpt": "",
         "notes": "",
     }
@@ -135,6 +140,12 @@ def scrape_scholarship_page(url: str, country: str) -> Dict[str, Any]:
 
     content_type = (response.headers.get("Content-Type") or "").lower()
     body = response.text or ""
+
+    final_url = str(getattr(response, "url", "") or "")
+    if "404" in final_url.lower():
+        result["error"] = f"Soft 404 detected at {final_url}"
+        result["notes"] = "Source URL appears to redirect to a not-found page."
+        return result
 
     aggregated_text = ""
     source_type = "html"
@@ -173,6 +184,7 @@ def scrape_scholarship_page(url: str, country: str) -> Dict[str, Any]:
 
     indicator_hits = _find_keyword_hits(aggregated_text, INDICATOR_KEYWORDS)
     auto_nomination_hits = _find_keyword_hits(aggregated_text, AUTO_NOMINATION_KEYWORDS)
+    custom_keyword_hits = _find_keyword_hits(aggregated_text, custom_keywords or [])
     requires_hs_nomination = bool(auto_nomination_hits)
 
     # Store a short excerpt around first hit for quick review.
@@ -193,6 +205,7 @@ def scrape_scholarship_page(url: str, country: str) -> Dict[str, Any]:
             "requires_hs_nomination": requires_hs_nomination,
             "indicator_hits": indicator_hits,
             "auto_nomination_hits": auto_nomination_hits,
+            "custom_keyword_hits": custom_keyword_hits,
             "matched_excerpt": excerpt,
             "notes": (
                 "Auto nomination set to True due to counselor/school endorsement keyword."
@@ -302,4 +315,123 @@ def check_nomination_alerts(database_path: str) -> Dict[str, Any]:
         "count": len(alerts),
         "parsing_issues": parsing_issues,
         "notes": "Alerts are urgency-sorted so counselors can be notified ahead of deadlines.",
+    }
+
+
+def scan_scholarship_sources(
+    sources: List[Dict[str, Any]],
+    required_keywords: Optional[List[str]] = None,
+    country_filter: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """Scan configured school sources and return matched opportunities.
+
+    Args:
+        sources: List of dictionaries with keys: school, country, url.
+        required_keywords: Optional keyword list; if set, at least one must match.
+        country_filter: Optional list like ["US", "Canada"].
+    """
+    required_keywords = [kw.strip().lower() for kw in (required_keywords or []) if kw.strip()]
+    allowed_countries = set(country_filter or ["US", "Canada"])
+
+    scanned_count = 0
+    matched_count = 0
+    matches: List[Dict[str, Any]] = []
+    failures: List[Dict[str, Any]] = []
+    skipped_sources: List[Dict[str, Any]] = []
+
+    for source in sources:
+        school = source.get("school", "")
+        country = source.get("country", "")
+        url = source.get("url", "")
+        urls = source.get("urls") or ([url] if url else [])
+        enabled = bool(source.get("enabled", True))
+
+        if not enabled:
+            skipped_sources.append(
+                {
+                    "school": school,
+                    "country": country,
+                    "reason": "disabled in source_config",
+                }
+            )
+            continue
+
+        if country not in allowed_countries:
+            continue
+        if not urls:
+            failures.append({"school": school, "url": url, "error": "Missing URL"})
+            continue
+
+        scanned_count += 1
+        scrape_result: Optional[Dict[str, Any]] = None
+        resolved_url = ""
+        attempted: List[Dict[str, str]] = []
+
+        for candidate_url in urls:
+            current_result = scrape_scholarship_page(
+                candidate_url,
+                country,
+                custom_keywords=required_keywords,
+            )
+            if current_result.get("success"):
+                scrape_result = current_result
+                resolved_url = candidate_url
+                break
+
+            attempted.append(
+                {
+                    "url": candidate_url,
+                    "error": current_result.get("error", "Unknown scraping error"),
+                }
+            )
+
+        if not scrape_result:
+            failures.append(
+                {
+                    "school": school,
+                    "url": url,
+                    "error": "All fallback URLs failed",
+                    "attempts": attempted,
+                }
+            )
+            continue
+
+        hit_pool = [
+            *scrape_result.get("indicator_hits", []),
+            *scrape_result.get("auto_nomination_hits", []),
+            *scrape_result.get("custom_keyword_hits", []),
+        ]
+        hit_pool_l = [item.lower() for item in hit_pool]
+
+        passes_keyword_gate = True
+        matched_required_keywords: List[str] = []
+        if required_keywords:
+            matched_required_keywords = [kw for kw in required_keywords if kw in hit_pool_l]
+            passes_keyword_gate = bool(matched_required_keywords)
+
+        if not passes_keyword_gate:
+            continue
+
+        matched_count += 1
+        matches.append(
+            {
+                "school": school,
+                "country": country,
+                "url": resolved_url or url,
+                "requires_hs_nomination": bool(scrape_result.get("requires_hs_nomination", False)),
+                "indicator_hits": scrape_result.get("indicator_hits", []),
+                "auto_nomination_hits": scrape_result.get("auto_nomination_hits", []),
+                "matched_required_keywords": matched_required_keywords,
+                "matched_excerpt": scrape_result.get("matched_excerpt", ""),
+                "source_type": scrape_result.get("source_type"),
+            }
+        )
+
+    return {
+        "success": True,
+        "scanned_count": scanned_count,
+        "matched_count": matched_count,
+        "matches": matches,
+        "failures": failures,
+        "skipped_sources": skipped_sources,
     }
