@@ -23,6 +23,26 @@ from source_config import (
 STATUS_OPTIONS = ["Not Started", "In Progress", "Submitted", "Awarded", "Rejected"]
 NOMINATION_STATUS_OPTIONS = ["Not Requested", "Requested", "Approved", "Submitted"]
 ELIGIBILITY_FILTER_OPTIONS = ["All", "Eligible", "Not Eligible", "Unknown"]
+BLACK_MALE_KEYWORDS = [
+    "black",
+    "african american",
+    "black male",
+    "male",
+    "men",
+    "diversity",
+    "minority",
+    "underrepresented",
+    "bipoc",
+]
+MAJOR_RELATED_KEYWORDS = [
+    "construction management",
+    "construction",
+    "building science",
+    "civil engineering",
+    "project management",
+    "architecture",
+    "engineer",
+]
 
 
 def _parse_date(value: Optional[str]) -> pd.Timestamp:
@@ -505,6 +525,15 @@ def main() -> None:
             value=True,
             key="include_major_related",
         )
+        strict_public_keywords = st.checkbox(
+            "Use only selected/extra keywords (do not auto-add criteria)",
+            value=True,
+            key="strict_public_keywords",
+            help=(
+                "When enabled, removed keywords stay removed. "
+                "When disabled, the include toggles append extra criteria terms automatically."
+            ),
+        )
         extra_public_keywords = st.text_input(
             "Extra public keywords (comma-separated)",
             value="",
@@ -519,32 +548,16 @@ def main() -> None:
 
         if st.button("Run public scholarship scan", key="run_public_scan"):
             final_public_keywords = list(public_keywords)
-            if include_black_male:
-                final_public_keywords.extend([
-                    "black",
-                    "african american",
-                    "black male",
-                    "male",
-                    "men",
-                    "diversity",
-                    "minority",
-                    "underrepresented",
-                    "bipoc",
-                ])
-            if include_major_related:
-                final_public_keywords.extend([
-                    "construction management",
-                    "construction",
-                    "building science",
-                    "civil engineering",
-                    "project management",
-                    "architecture",
-                    "engineer",
-                ])
+            if not strict_public_keywords and include_black_male:
+                final_public_keywords.extend(BLACK_MALE_KEYWORDS)
+            if not strict_public_keywords and include_major_related:
+                final_public_keywords.extend(MAJOR_RELATED_KEYWORDS)
 
             final_public_keywords.extend(_parse_extra_keywords(extra_public_keywords))
             final_public_keywords = list(dict.fromkeys(kw.strip().lower() for kw in final_public_keywords if kw.strip()))
             st.caption(f"Running public scan with {len(final_public_keywords)} keywords.")
+            with st.expander("Effective public scan keywords", expanded=False):
+                st.write(final_public_keywords)
 
             public_scan_result = scraper.scan_scholarship_sources(
                 sources=PUBLIC_SOURCE_CATALOG,
