@@ -167,6 +167,12 @@ def _parse_extra_keywords(raw_text: str) -> List[str]:
     return list(dict.fromkeys(values))
 
 
+def _public_sources_for_scan(ignore_enabled_flags: bool) -> List[Dict]:
+    if not ignore_enabled_flags:
+        return PUBLIC_SOURCE_CATALOG
+    return [{**source, "enabled": True} for source in PUBLIC_SOURCE_CATALOG]
+
+
 def main() -> None:
     st.set_page_config(
         page_title="Fall 2027 Scholarship & Application Engine (US & Canada)",
@@ -509,11 +515,12 @@ def main() -> None:
             + ["black", "african american", "black male", "male", "diversity", "minority"],
             key="public_keywords",
         )
-        public_countries = st.multiselect(
-            "Public scholarship countries",
-            ["US", "Canada"],
-            default=PUBLIC_SEARCH_CRITERIA["countries"],
-            key="public_countries",
+        st.caption("Public pull countries are hardwired to US and Canada.")
+        scan_all_public_sources = st.checkbox(
+            "Scan all public sources (ignore source enabled defaults)",
+            value=True,
+            key="scan_all_public_sources",
+            help="Enable this to avoid excluding sources due to source_config enabled flags.",
         )
         include_black_male = st.checkbox(
             "Include Black male / Black student focused criteria",
@@ -556,14 +563,16 @@ def main() -> None:
             final_public_keywords.extend(_parse_extra_keywords(extra_public_keywords))
             final_public_keywords = list(dict.fromkeys(kw.strip().lower() for kw in final_public_keywords if kw.strip()))
             st.caption(f"Running public scan with {len(final_public_keywords)} keywords.")
+            public_scan_gpa = float(student_gpa) if student_gpa is not None else 3.22
+            st.caption(f"Public pull GPA is hardwired to student profile/default: {public_scan_gpa:.2f}")
             with st.expander("Effective public scan keywords", expanded=False):
                 st.write(final_public_keywords)
 
             public_scan_result = scraper.scan_scholarship_sources(
-                sources=PUBLIC_SOURCE_CATALOG,
+                sources=_public_sources_for_scan(scan_all_public_sources),
                 required_keywords=final_public_keywords,
-                country_filter=public_countries,
-                student_gpa=float(student_gpa),
+                country_filter=["US", "Canada"],
+                student_gpa=public_scan_gpa,
             )
             st.session_state["latest_public_scan"] = public_scan_result
 
