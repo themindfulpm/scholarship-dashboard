@@ -99,7 +99,7 @@ PUBLIC_SOURCE_CATALOG = [
     {
         "school": "Scholarships.com Directory",
         "country": "US",
-        "enabled": True,
+        "enabled": False,
         "url": "https://www.scholarships.com/financial-aid/college-scholarships/scholarship-directory/",
         "urls": [
             "https://www.scholarships.com/financial-aid/college-scholarships/scholarship-directory/",
@@ -110,7 +110,7 @@ PUBLIC_SOURCE_CATALOG = [
     {
         "school": "Fastweb Scholarships",
         "country": "US",
-        "enabled": True,
+        "enabled": False,
         "url": "https://www.fastweb.com/college-scholarships",
         "urls": ["https://www.fastweb.com/college-scholarships"],
         "priority": "high",
@@ -119,7 +119,7 @@ PUBLIC_SOURCE_CATALOG = [
     {
         "school": "Bold.org Scholarships",
         "country": "US",
-        "enabled": True,
+        "enabled": False,
         "url": "https://bold.org/scholarships/",
         "urls": ["https://bold.org/scholarships/"],
         "priority": "high",
@@ -128,7 +128,7 @@ PUBLIC_SOURCE_CATALOG = [
     {
         "school": "Unigo Scholarships",
         "country": "US",
-        "enabled": True,
+        "enabled": False,
         "url": "https://www.unigo.com/scholarships",
         "urls": ["https://www.unigo.com/scholarships"],
         "priority": "high",
