@@ -1,0 +1,5 @@
+streamlit==1.60.0
+pandas==2.3.2
+requests==2.34.2
+beautifulsoup4==4.15.0
+feedparser==6.0.14

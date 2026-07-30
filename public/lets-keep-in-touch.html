@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="description" content="Lets Keep In Touch form for The Mindful Project Manager, LLC." />
+  <title>Lets Keep In Touch | The Mindful Project Manager, LLC</title>
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --panel: rgba(255, 255, 255, 0.9);
+      --text: #0f172a;
+      --muted: #64748b;
+      --accent: #0f766e;
+      --accent-2: #1d4ed8;
+      --border: #e2e8f0;
+      --shadow: 0 22px 60px rgba(15, 23, 42, 0.12);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Georgia, 'Times New Roman', serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(15, 118, 110, 0.12), transparent 30%),
+        radial-gradient(circle at bottom right, rgba(29, 78, 216, 0.08), transparent 28%),
+        linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .shell {
+      width: min(760px, 100%);
+      background: var(--panel);
+      border: 1px solid rgba(255,255,255,0.75);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(14px);
+      border-radius: 28px;
+      overflow: hidden;
+    }
+    .hero {
+      padding: 34px 32px 22px;
+      border-bottom: 1px solid rgba(209, 213, 219, 0.7);
+      background: linear-gradient(135deg, rgba(15, 118, 110, 0.06), rgba(29, 78, 216, 0.04));
+    }
+    .eyebrow {
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      font: 600 12px/1.2 Arial, sans-serif;
+      color: var(--accent);
+      margin: 0 0 10px;
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(32px, 5vw, 52px);
+      font-style: italic;
+      font-weight: 500;
+      line-height: 1.02;
+    }
+    .subtitle {
+      margin: 14px 0 0;
+      font: 400 16px/1.6 Arial, sans-serif;
+      color: var(--muted);
+      max-width: 60ch;
+    }
+    .brand-chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 18px;
+    }
+    .chip {
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.85);
+      padding: 8px 12px;
+      font: 600 12px/1 Arial, sans-serif;
+      color: #334155;
+    }
+    .content {
+      padding: 28px 32px 32px;
+      display: grid;
+      gap: 22px;
+    }
+    .intro-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 18px;
+      align-items: start;
+    }
+    .panel {
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      padding: 18px;
+      background: rgba(255,255,255,0.8);
+    }
+    .note {
+      font: 400 14px/1.6 Arial, sans-serif;
+      color: var(--muted);
+      margin: 0;
+    }
+    .panel h2 {
+      margin: 0 0 8px;
+      font: 700 16px/1.2 Arial, sans-serif;
+      color: #111827;
+    }
+    .panel ul {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--muted);
+      font: 400 14px/1.6 Arial, sans-serif;
+    }
+    form {
+      display: grid;
+      gap: 14px;
+    }
+    .grid {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    label {
+      display: grid;
+      gap: 7px;
+      font: 600 13px/1.3 Arial, sans-serif;
+      color: #334155;
+    }
+    input {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 15px;
+      font: 400 15px/1.4 Arial, sans-serif;
+      background: rgba(255,255,255,0.92);
+      color: var(--text);
+      outline: none;
+      transition: border-color .15s ease, box-shadow .15s ease;
+    }
+    input:focus {
+      border-color: rgba(15, 118, 110, 0.55);
+      box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.12);
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      margin-top: 8px;
+    }
+    button {
+      border: none;
+      border-radius: 999px;
+      padding: 14px 22px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: white;
+      font: 700 15px/1 Arial, sans-serif;
+      cursor: pointer;
+      box-shadow: 0 10px 20px rgba(15, 118, 110, 0.22);
+    }
+    button:disabled { opacity: 0.7; cursor: not-allowed; }
+    .status {
+      min-height: 24px;
+      font: 600 14px/1.4 Arial, sans-serif;
+      color: var(--accent);
+    }
+    .footer {
+      padding: 16px 32px 28px;
+      border-top: 1px solid rgba(209, 213, 219, 0.7);
+      font: 400 12px/1.6 Arial, sans-serif;
+      color: var(--muted);
+    }
+    @media (max-width: 640px) {
+      .hero, .content, .footer { padding-left: 18px; padding-right: 18px; }
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <p class="eyebrow">The Mindful Project Manager, LLC</p>
+      <h1>Lets Keep In Touch</h1>
+      <p class="subtitle">Share your contact information so I can add you to my mailing list and keep you updated with future newsletters and offerings.</p>
+      <div class="brand-chip-row">
+        <span class="chip">Helping you find the power in your pause</span>
+        <span class="chip">Mindful leadership</span>
+        <span class="chip">Weekly newsletter</span>
+      </div>
+    </section>
+
+    <section class="content">
+      <div class="intro-grid">
+        <div class="panel">
+          <h2>What happens next</h2>
+          <ul>
+            <li>You can unsubscribe anytime.</li>
+            <li>You can receive newsletters, offerings, and follow-up updates.</li>
+          </ul>
+        </div>
+      </div>
+
+      <form id="keepInTouchForm" class="panel">
+        <div class="grid">
+          <label>First Name<input name="firstName" autocomplete="given-name" required /></label>
+          <label>Last Name<input name="lastName" autocomplete="family-name" required /></label>
+        </div>
+        <div class="grid">
+          <label>Email Address<input name="email" type="email" autocomplete="email" required /></label>
+          <label>Phone Number<input name="phone" type="tel" autocomplete="tel" required /></label>
+        </div>
+        <div class="actions">
+          <button id="submitButton" type="submit">Stay Connected</button>
+          <span id="status" class="status"></span>
+        </div>
+      </form>
+    </section>
+
+    <section class="footer">
+      By submitting this form, you agree to receive future communications from The Mindful Project Manager, LLC. You can unsubscribe at any time using the link in any email.
+    </section>
+  </main>
+
+  <script>
+    const form = document.getElementById('keepInTouchForm');
+    const status = document.getElementById('status');
+    const submitButton = document.getElementById('submitButton');
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      status.textContent = '';
+      submitButton.disabled = true;
+      submitButton.textContent = 'Submitting...';
+
+      const data = Object.fromEntries(new FormData(form).entries());
+
+      try {
+        const response = await fetch('/.netlify/functions/keep-in-touch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || 'Unable to submit your information.');
+        }
+
+        form.reset();
+        status.textContent = payload.message || 'Thank you! You have been added to the mailing list!';
+        status.style.color = '#0f766e';
+      } catch (error) {
+        status.textContent = error.message;
+        status.style.color = '#b91c1c';
+      } finally {
+        submitButton.disabled = false;
+        submitButton.textContent = 'Stay Connected';
+      }
+    });
+  </script>
+</body>
+</html>

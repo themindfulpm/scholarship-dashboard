@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
+  <title id="title">The Mindful Project Manager, LLC</title>
+  <desc id="desc">Soft themed newsletter banner with brand title and subtitle.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fbf7ef"/>
+      <stop offset="55%" stop-color="#edf5ef"/>
+      <stop offset="100%" stop-color="#ddebe6"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#7aa38f" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#b8d2c1" stop-opacity="0.18"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="16" flood-color="#26412f" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="360" rx="32" fill="url(#bg)"/>
+  <circle cx="102" cy="78" r="68" fill="#ffffff" opacity="0.3"/>
+  <circle cx="1085" cy="286" r="104" fill="url(#accent)"/>
+  <path d="M1008 44c40 34 58 84 54 139-4 56-29 110-74 156" fill="none" stroke="#9fbdaa" stroke-width="18" stroke-linecap="round" opacity="0.28"/>
+  <path d="M1022 74c-34 10-62 32-84 66" fill="none" stroke="#7aa38f" stroke-width="12" stroke-linecap="round" opacity="0.34"/>
+  <path d="M980 170c34-4 67 4 97 23" fill="none" stroke="#c0d8cc" stroke-width="12" stroke-linecap="round" opacity="0.5"/>
+
+  <g filter="url(#shadow)">
+    <rect x="76" y="64" width="1048" height="232" rx="28" fill="#ffffff" fill-opacity="0.72" stroke="#d7e6dd"/>
+  </g>
+
+  <text x="120" y="168" fill="#1f2d29" font-family="Georgia, 'Times New Roman', serif" font-size="64" font-style="italic" font-weight="500">The Mindful Project Manager, LLC</text>
+  <text x="122" y="214" fill="#4f6b63" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="400">Helping you find the power in your pause.</text>
+
+  <g opacity="0.9">
+    <rect x="122" y="240" width="166" height="38" rx="19" fill="#edf5ef"/>
+    <text x="146" y="264" fill="#47665d" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700">Weekly Newsletter</text>
+  </g>
+</svg>
