@@ -15,7 +15,6 @@ from typing import Any, Dict, List, Optional
 
 import database
 
-
 STUDENT_MAJOR = "Construction Management"
 STUDENT_GPA = 3.22
 TARGET_INTAKE = "Fall 2027"
@@ -225,8 +224,9 @@ def seed_initial_scholarships() -> Dict[str, Any]:
                 "currency": "USD",
                 "award_amount": 8000,
                 "scholarship_min_gpa": 3.0,
+                "application_deadline": "2026-12-15",
                 "application_url": "https://www.morgan.edu/financial-aid/scholarships",
-                "notes": "Top Choice / HBCU | Major: Construction Management | Target Awards: Institutional Merit",
+                "notes": "Top Choice / HBCU | Major: Construction Management | Target Awards: Institutional Merit | Deadline estimated; verify with school",
             },
             {
                 "title": "Morgan State Departmental Construction Management Scholarship",
@@ -235,8 +235,9 @@ def seed_initial_scholarships() -> Dict[str, Any]:
                 "currency": "USD",
                 "award_amount": 3000,
                 "scholarship_min_gpa": 3.0,
+                "application_deadline": "2027-01-15",
                 "application_url": "https://www.morgan.edu/financial-aid/scholarships",
-                "notes": "Major: Construction Management | Departmental award track",
+                "notes": "Major: Construction Management | Departmental award track | Deadline estimated; verify with school",
             },
             {
                 "title": "Kennesaw State Merit Scholarship",
@@ -245,8 +246,9 @@ def seed_initial_scholarships() -> Dict[str, Any]:
                 "currency": "USD",
                 "award_amount": 4000,
                 "scholarship_min_gpa": 3.0,
+                "application_deadline": "2026-12-01",
                 "application_url": "https://www.kennesaw.edu/financial-aid/types-of-aid/scholarships.php",
-                "notes": "In-State / Regional | Major: Construction Management",
+                "notes": "In-State / Regional | Major: Construction Management | Deadline estimated; verify with school",
             },
             {
                 "title": "George Brown International Student Entrance Scholarship",
@@ -255,10 +257,12 @@ def seed_initial_scholarships() -> Dict[str, Any]:
                 "currency": "CAD",
                 "award_amount": 5000,
                 "scholarship_min_gpa": 3.0,
+                "application_deadline": "2027-02-01",
                 "application_url": "https://www.georgebrown.ca/international/tuition-and-scholarships",
                 "notes": (
                     "International / Toronto | Major: Honours Bachelor of Technology "
-                    "(Construction Management) | Target Awards: International Student Entrance Scholarships"
+                    "(Construction Management) | Target Awards: International Student Entrance Scholarships | "
+                    "Deadline estimated; verify with school"
                 ),
             },
             {
@@ -268,10 +272,12 @@ def seed_initial_scholarships() -> Dict[str, Any]:
                 "currency": "CAD",
                 "award_amount": 3500,
                 "scholarship_min_gpa": 3.0,
+                "application_deadline": "2027-02-15",
                 "application_url": "https://www.georgebrown.ca/international/tuition-and-scholarships",
                 "notes": (
                     "Major: Honours Bachelor of Technology (Construction Management) | "
-                    "Target Awards: Angelo DelZotto School of Construction Management Awards"
+                    "Target Awards: Angelo DelZotto School of Construction Management Awards | "
+                    "Deadline estimated; verify with school"
                 ),
             },
             {
@@ -281,8 +287,9 @@ def seed_initial_scholarships() -> Dict[str, Any]:
                 "currency": "USD",
                 "award_amount": 6000,
                 "scholarship_min_gpa": 3.0,
+                "application_deadline": "2026-12-01",
                 "application_url": "https://www.ncat.edu/admissions/financial-aid/",
-                "notes": "HBCU | Major: Construction Management",
+                "notes": "HBCU | Major: Construction Management | Deadline estimated; verify with school",
             },
             {
                 "title": "Florida A&M Merit Scholarship",
@@ -291,8 +298,9 @@ def seed_initial_scholarships() -> Dict[str, Any]:
                 "currency": "USD",
                 "award_amount": 6000,
                 "scholarship_min_gpa": 3.0,
+                "application_deadline": "2026-11-15",
                 "application_url": "https://www.famu.edu/students/financial-aid/scholarships/index.php",
-                "notes": "HBCU | Major: Construction Management",
+                "notes": "HBCU | Major: Construction Management | Deadline estimated; verify with school",
             },
             {
                 "title": "Texas Southern Merit Scholarship",
@@ -301,8 +309,9 @@ def seed_initial_scholarships() -> Dict[str, Any]:
                 "currency": "USD",
                 "award_amount": 5000,
                 "scholarship_min_gpa": 2.8,
+                "application_deadline": "2027-01-31",
                 "application_url": "https://www.tsu.edu/financial-aid/scholarships/",
-                "notes": "HBCU | Major: Construction Management",
+                "notes": "HBCU | Major: Construction Management | Deadline estimated; verify with school",
             },
             {
                 "title": "Wentworth Merit Scholarship",
@@ -311,8 +320,42 @@ def seed_initial_scholarships() -> Dict[str, Any]:
                 "currency": "USD",
                 "award_amount": 7000,
                 "scholarship_min_gpa": 3.2,
+                "application_deadline": "2027-01-15",
                 "application_url": "https://wit.edu/admissions/tuition-financial-aid/scholarships",
-                "notes": "Major: Construction Management",
+                "notes": "Major: Construction Management | Deadline estimated; verify with school",
+            },
+            {
+                "title": "Delta Community Credit Union HBCU Scholarship",
+                "target_school": "Public scholarship",
+                "country": "US",
+                "currency": "USD",
+                "award_amount": 5000,
+                "scholarship_min_gpa": 2.8,
+                "application_deadline": "2027-03-15",
+                "application_url": "https://www.deltacommunitycu.com/community/scholarships/hbcu-scholarship.html",
+                "notes": "HBCU-focused public scholarship | Deadline estimated; verify with provider",
+            },
+            {
+                "title": "Thurgood Marshall College Fund Scholarship",
+                "target_school": "Public scholarship",
+                "country": "US",
+                "currency": "USD",
+                "award_amount": 7500,
+                "scholarship_min_gpa": 3.0,
+                "application_deadline": "2027-03-01",
+                "application_url": "https://www.tmcf.org/students-alumni/scholarships/",
+                "notes": "Major: Construction Management aligned | Deadline estimated; verify with provider",
+            },
+            {
+                "title": "Jackie Robinson Foundation Scholarship",
+                "target_school": "Public scholarship",
+                "country": "US",
+                "currency": "USD",
+                "award_amount": 10000,
+                "scholarship_min_gpa": 3.0,
+                "application_deadline": "2027-01-15",
+                "application_url": "https://jackierobinson.org/apply/",
+                "notes": "National scholarship | Deadline estimated; verify with provider",
             },
         ]
 
@@ -340,7 +383,10 @@ def seed_initial_scholarships() -> Dict[str, Any]:
                     ('North Carolina A&T Merit Scholarship', 'North Carolina A&T State University'),
                     ('Florida A&M Merit Scholarship', 'Florida A&M University'),
                     ('Texas Southern Merit Scholarship', 'Texas Southern University'),
-                    ('Wentworth Merit Scholarship', 'Wentworth Institute of Technology')
+                    ('Wentworth Merit Scholarship', 'Wentworth Institute of Technology'),
+                    ('Delta Community Credit Union HBCU Scholarship', 'Public scholarship'),
+                    ('Thurgood Marshall College Fund Scholarship', 'Public scholarship'),
+                    ('Jackie Robinson Foundation Scholarship', 'Public scholarship')
                 )
                 """
             ).fetchall()

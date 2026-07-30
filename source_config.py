@@ -134,6 +134,41 @@ PUBLIC_SOURCE_CATALOG = [
         "priority": "high",
         "school_type": "Public",
     },
+    {
+        "school": "Thurgood Marshall College Fund",
+        "country": "US",
+        "enabled": True,
+        "url": "https://www.tmcf.org/students-alumni/scholarships/",
+        "urls": [
+            "https://www.tmcf.org/students-alumni/scholarships/",
+        ],
+        "priority": "high",
+        "school_type": "Public",
+    },
+    {
+        "school": "Jackie Robinson Foundation",
+        "country": "US",
+        "enabled": True,
+        "url": "https://jackierobinson.org/apply/",
+        "urls": [
+            "https://jackierobinson.org/apply/",
+            "https://jackierobinson.org/scholarship/",
+        ],
+        "priority": "high",
+        "school_type": "Public",
+    },
+    {
+        "school": "Delta Community Credit Union",
+        "country": "US",
+        "enabled": True,
+        "url": "https://www.deltacommunitycu.com/community/scholarships.html",
+        "urls": [
+            "https://www.deltacommunitycu.com/community/scholarships/hbcu-scholarship.html",
+            "https://www.deltacommunitycu.com/community/scholarships.html",
+        ],
+        "priority": "medium",
+        "school_type": "Public",
+    },
 ]
 
 DEFAULT_AUTO_PULL_KEYWORDS = [
@@ -160,6 +195,10 @@ PUBLIC_SEARCH_CRITERIA = {
         "open to all",
         "public scholarship",
         "national scholarship",
+        "thurgood marshall",
+        "jackie robinson",
+        "delta community",
+        "hbcu scholarship",
     ],
     "major_keywords": [
         "construction management",
