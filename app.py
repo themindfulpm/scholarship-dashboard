@@ -147,10 +147,21 @@ def main() -> None:
     if not st.session_state.get("startup_seed_checked"):
         st.session_state["startup_seed_checked"] = True
         scholarship_check = db.get_scholarships()
-        if scholarship_check.get("success") and not scholarship_check.get("data"):
+        needs_seed = (not scholarship_check.get("success")) or (not scholarship_check.get("data"))
+        if needs_seed:
             seed_result = seed_initial_scholarships()
             if not seed_result.get("success"):
-                st.warning(f"Startup seed warning: {seed_result.get('error', 'Unable to seed scholarships.')}")
+                seed_retry_result = seed_initial_scholarships()
+                if seed_retry_result.get("success"):
+                    st.toast("Seeded target schools and scholarships.")
+                else:
+                    st.warning("Startup seed warning: unable to seed scholarships.")
+                    with st.expander("Startup seed details"):
+                        st.write({
+                            "first_attempt": seed_result,
+                            "second_attempt": seed_retry_result,
+                            "scholarship_check": scholarship_check,
+                        })
             else:
                 st.toast("Seeded target schools and scholarships.")
 
